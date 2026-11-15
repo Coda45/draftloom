@@ -47,7 +47,10 @@ export type SceneCommand =
     | { type: 'setRegionPolygon'; id: string; polygon: Vec2[] }
     | { type: 'renameRegion'; id: string; name: string }
     | { type: 'applyPackingResult'; boxes: BoxInstance[] }
-    | { type: 'setSource'; source: SourceReference | undefined };
+    | { type: 'setSource'; source: SourceReference | undefined }
+    // Rescale about the origin. Plan (X/Z) only unless includeHeights; `calibration`
+    // relabels the source calibrations it rescales.
+    | { type: 'scaleScene'; factor: number; includeHeights?: boolean; calibration?: SourceReference['calibrationMethod'] };
 
 export class SceneCommandError extends Error {}
 
@@ -101,6 +104,37 @@ function updateObject<K extends SceneObject['kind']>(
     });
     if (!found) throw new SceneCommandError(`No ${kind} with ID "${id}".`);
     return { ...scene, objects };
+}
+
+const scaleVec = <T extends number[]>(v: T, f: number): T => v.map((n) => n * f) as T;
+
+/**
+ * Rescales the scene about the origin to confirm an assumed import scale. A
+ * floor-plan scale only determines plan (X/Z) measurements, so heights and Y
+ * positions keep their values unless includeHeights is set.
+ */
+function scaleScene(scene: SceneDocument, f: number, includeHeights: boolean, calibration?: SourceReference['calibrationMethod']): SceneDocument {
+    const fy = includeHeights ? f : 1;
+    const xyz = <T extends [number, number, number]>(v: T): T => [v[0] * f, v[1] * fy, v[2] * f] as T;
+    const definitions: Record<string, ObjectDefinition> = {};
+    for (const [id, d] of Object.entries(scene.definitions)) definitions[id] = { ...d, dimensions: xyz(d.dimensions) };
+    const objects = scene.objects.map((o): SceneObject => {
+        if (o.kind === 'box') {
+            const b: BoxInstance = { ...o, position: xyz(o.position) };
+            if (o.dimensionsOverride) b.dimensionsOverride = xyz(o.dimensionsOverride);
+            return b;
+        }
+        if (o.kind === 'wall') {
+            // Thickness is a plan (footprint) measurement.
+            return { ...o, start: scaleVec(o.start, f), end: scaleVec(o.end, f), baseY: o.baseY * fy, height: o.height * fy, thickness: o.thickness * f };
+        }
+        return { ...o, polygon: o.polygon.map((p) => scaleVec(p, f)) };
+    });
+    // world = M * pixel, so scaling the world scales every element of the calibration.
+    const sources = scene.sources.map((s) =>
+        s.pixelToWorldXZ ? { ...s, pixelToWorldXZ: scaleVec(s.pixelToWorldXZ, f), ...(calibration ? { calibrationMethod: calibration } : {}) } : s,
+    );
+    return { ...scene, definitions, objects, sources };
 }
 
 /** Applies a command and returns the next scene. Throws SceneCommandError for invalid edits. */
@@ -239,6 +273,10 @@ function reduce(scene: SceneDocument, cmd: SceneCommand): SceneDocument {
         case 'setSource':
             if (cmd.source === undefined) return { ...scene, sources: scene.sources.slice(1) };
             return { ...scene, sources: [cmd.source, ...scene.sources.slice(1)] };
+        case 'scaleScene':
+            if (!Number.isFinite(cmd.factor) || cmd.factor <= 0) throw new SceneCommandError('Scale factor must be a positive, finite number.');
+            if (cmd.factor === 1 && !cmd.calibration) return scene;
+            return scaleScene(scene, cmd.factor, cmd.includeHeights ?? false, cmd.calibration);
     }
 }
 

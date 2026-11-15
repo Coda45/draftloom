@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import sampleJson from '../../samples/simple-studio.draftloom.json';
 import { Inspector } from '../editor/inspector/Inspector';
 import { DefinitionsPanel } from '../editor/inspector/DefinitionsPanel';
+import { NumberField } from '../editor/inspector/fields';
 import { PackingPanel } from '../editor/packing/PackingPanel';
 import { TOOLS, type OverlayImage, type Tool } from '../editor/tools';
 import { SourcePanel, effectiveMatrix } from '../editor/view2d/SourcePanel';
@@ -14,12 +15,14 @@ import { objectDisplayName } from '../editor/viewport3d/sceneObjects';
 import { sceneToGlb } from '../export/glb';
 import { NATIVE_EXTENSION, downloadBlob, parseProjectFile, safeFileName, serializeScene } from '../export/nativeJson';
 import { sceneToSvg } from '../export/svg';
+import { ImportPanel } from '../import/public';
+import { boxDimensions, wallLength } from '../scene/geometry';
 import { newId } from '../scene/ids';
 import { Autosave, ProjectStorage, type SavedProject, type SaveStatus } from '../scene/persistence';
 import type { SceneDocument } from '../scene/schema';
 import { SceneStore } from '../scene/store';
 import { validateScene } from '../scene/validate';
-import type { ReconstructionIssue } from '../shared/reconstruction-contract';
+import type { ReconstructionIssue, ReconstructionResult } from '../shared/reconstruction-contract';
 import { EditorProvider, useEditor, useStoreState, type NoticeTone } from './EditorContext';
 import { applyReconstruction } from './reconstructionIntegration';
 
@@ -88,6 +91,8 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
     const [fitRequest, setFitRequest] = useState(0);
     const [frameRequest, setFrameRequest] = useState<{ n: number; id: string | null }>({ n: 0, id: null });
     const [issues, setIssues] = useState<ReconstructionIssue[]>([]);
+    // Set when an imported reconstruction used an assumed scale the user hasn't confirmed yet.
+    const [scalePending, setScalePending] = useState(false);
     const [exporting, setExporting] = useState(false);
 
     // --- Persistence ---
@@ -241,6 +246,34 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
     const confirmReplace = (what: string) =>
         !hasWork || window.confirm(`${what} will replace the current project, and the next autosave will overwrite it. Use “Save JSON” first if you want to keep a copy.\n\nContinue?`);
 
+    const fitBothViews = () => {
+        setFitRequest((n) => n + 1);
+        setFrameRequest((f) => ({ n: f.n + 1, id: null }));
+    };
+
+    /** The one editor entry point for reconstruction results (file or live import). Returns an error message on rejection. */
+    const acceptReconstruction = async (result: ReconstructionResult, sourceImage?: Blob): Promise<string | null> => {
+        const r = await applyReconstruction(store, storage, result, sourceImage);
+        if (!r.ok) return `Reconstruction rejected: ${r.errors.slice(0, 3).join('; ')}${r.errors.length > 3 ? ` (+${r.errors.length - 3} more)` : ''}`;
+        setIssues(r.issues);
+        setScalePending(result.requiresScaleConfirmation);
+        if (sourceImage) setOverlayVisible(true);
+        fitBothViews();
+        notify(`Imported reconstruction with ${r.issues.length} issue${r.issues.length === 1 ? '' : 's'}.${result.requiresScaleConfirmation ? ' Confirm the scale before relying on measurements.' : ''}`);
+        return null;
+    };
+
+    // Called by the import panel (src/import) once the user accepts a reviewed result.
+    // Throwing reports the reason in that panel's status line.
+    const onSceneReady = async (result: ReconstructionResult, sourceImage: Blob) => {
+        if (!confirmReplace('Importing this drawing')) throw new Error('Import cancelled. The current project was kept.');
+        const error = await acceptReconstruction(result, sourceImage);
+        if (error) {
+            notify(error, 'error');
+            throw new Error(error);
+        }
+    };
+
     const openFile = async (file: File) => {
         const parsed = parseProjectFile(await file.text());
         if (!parsed.ok) {
@@ -251,18 +284,13 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
         if (parsed.kind === 'scene') {
             store.replaceScene(parsed.scene);
             setIssues([]);
+            setScalePending(false);
             notify(`Opened ${file.name}.${parsed.scene.sources.some((item) => item.imageKey) ? ' Source images are not included in project files.' : ''}`);
+            fitBothViews();
         } else {
-            const r = await applyReconstruction(store, storage, parsed.result);
-            if (!r.ok) {
-                notify(`Reconstruction rejected: ${r.errors.slice(0, 3).join('; ')}`, 'error');
-                return;
-            }
-            setIssues(r.issues);
-            notify(`Imported reconstruction with ${r.issues.length} issue${r.issues.length === 1 ? '' : 's'}.`);
+            const error = await acceptReconstruction(parsed.result);
+            if (error) notify(error, 'error');
         }
-        setFitRequest((n) => n + 1);
-        setFrameRequest((f) => ({ n: f.n + 1, id: null }));
     };
 
     const exportJson = () => {
@@ -292,6 +320,7 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
         if (!confirmReplace('A new project')) return;
         run({ type: 'resetScene' });
         setIssues([]);
+        setScalePending(false);
         setFitRequest((n) => n + 1);
     };
 
@@ -299,8 +328,8 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
         if (!confirmReplace('The sample project')) return;
         store.replaceScene(loadSample());
         setIssues([]);
-        setFitRequest((n) => n + 1);
-        setFrameRequest((f) => ({ n: f.n + 1, id: null }));
+        setScalePending(false);
+        fitBothViews();
     };
 
     const restore = () => {
@@ -308,8 +337,13 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
         store.replaceScene(restoreOffer.scene);
         setRestoreOffer(null);
         setAutosaveReady(true);
-        setFitRequest((n) => n + 1);
-        setFrameRequest((f) => ({ n: f.n + 1, id: null }));
+        fitBothViews();
+    };
+
+    // Keeping the assumed scale leaves its warning listed; confirming one resolves it.
+    const scaleDone = (confirmed: boolean) => {
+        setScalePending(false);
+        if (confirmed) setIssues((list) => list.filter((i) => i.code !== 'SCALE_CONFIRMATION_REQUIRED'));
     };
 
     const frame = useCallback(() => {
@@ -370,6 +404,9 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
                     <button onClick={newProject}>New</button>
                     <button onClick={() => fileInput.current?.click()}>Open…</button>
                     <button onClick={openSample}>Sample</button>
+                    <button onClick={() => document.getElementById('import-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} title="Photo or QR phone upload">
+                        Import drawing
+                    </button>
                     <input
                         ref={fileInput}
                         type="file"
@@ -462,15 +499,16 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
             </main>
 
             <aside className="sidebar">
+                {scalePending && <ScalePanel onDone={scaleDone} />}
                 <Inspector />
                 <DefinitionsPanel activeDefinitionId={activeDefinitionId} onActivate={(id) => setActiveDefinitionId(id)} />
                 <PackingPanel activeDefinitionId={activeDefinitionId} />
                 <IssuesPanel issues={issues} onClear={() => setIssues([])} />
                 <SourcePanel hasImage={!!image} visible={overlayVisible} opacity={overlayOpacity} onVisible={setOverlayVisible} onOpacity={setOverlayOpacity} onLoadImage={(f) => void loadReferenceImage(f)} />
-                <section className="panel">
-                    <h2>Sketch import</h2>
-                    <p className="muted small">The sketch reconstruction module (photo / QR upload) isn’t connected in this build. Manual editing works without it. You can open a saved reconstruction result JSON with Open….</p>
-                </section>
+                {/* Import UI owned by the reconstruction module; the editor only supplies onSceneReady. */}
+                <div className="panel import-host" id="import-panel">
+                    <ImportPanel onSceneReady={onSceneReady} />
+                </div>
             </aside>
 
             <footer className="statusbar">
@@ -499,6 +537,7 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
                         ))}
                     </select>
                 </label>
+                {scalePending && <span className="warn">Scale not confirmed</span>}
                 {issues.length > 0 && <span className="warn">{issues.length} import issue{issues.length === 1 ? '' : 's'}</span>}
                 <span className="spacer" />
                 {notice && <span className={`notice ${notice.tone}`}>{notice.text}</span>}
@@ -515,6 +554,58 @@ function SaveIndicator({ status, paused }: { status: SaveStatus; paused: boolean
         <span className={`save-indicator ${status.state}`} title={title}>
             {text}
         </span>
+    );
+}
+
+/** Confirms an assumed import scale from one known real dimension, then rescales the scene uniformly. */
+function ScalePanel({ onDone }: { onDone(confirmed: boolean): void }) {
+    const { run, notify } = useEditor();
+    const { scene, selectedId } = useStoreState();
+    const selected = scene.objects.find((o) => o.id === selectedId);
+    const measured =
+        selected?.kind === 'wall'
+            ? { what: 'wall length', meters: wallLength(selected) }
+            : selected?.kind === 'box'
+              ? { what: 'box width (X)', meters: boxDimensions(selected, scene.definitions)[0] }
+              : null;
+
+    const apply = (realMeters: number) => {
+        if (!measured || measured.meters <= 0 || !(realMeters > 0)) return;
+        const factor = realMeters / measured.meters;
+        // A floor-plan scale says nothing about heights (they are separate defaults);
+        // an isometric reconstruction derives heights from the same image scale.
+        const includeHeights = scene.sources[0]?.mode === 'isometric';
+        // The user's measurement now defines the image calibration, so it becomes manual.
+        if (run({ type: 'scaleScene', factor, includeHeights, calibration: 'manual' })) {
+            notify(`${includeHeights ? 'Scene' : 'Plan'} rescaled ×${factor.toFixed(4)} from the known ${measured.what}${includeHeights ? '' : '; heights unchanged'}. Undo reverts it.`);
+            onDone(true);
+        }
+    };
+
+    return (
+        <section className="panel scale-panel">
+            <h2>Scale not confirmed</h2>
+            <p className="muted small">This reconstruction used a provisional scale, so its sizes are proportional, not measured. Select a wall or box whose real size you know and enter it; the plan and its source overlay are rescaled together. Heights are separate defaults, so check them in the inspector.</p>
+            {measured ? (
+                <>
+                    <p className="readout">
+                        Current {measured.what}: {measured.meters.toFixed(3)} m
+                    </p>
+                    <NumberField label={`Real ${measured.what}`} unit="m" min={0.001} step={0.01} value={measured.meters} onCommit={apply} />
+                </>
+            ) : (
+                <p className="muted small">Select a wall or box in either view.</p>
+            )}
+            <button
+                className="link-button"
+                onClick={() => {
+                    notify('Keeping the provisional scale. Dimensions are approximate.');
+                    onDone(false);
+                }}
+            >
+                Keep provisional scale
+            </button>
+        </section>
     );
 }
 

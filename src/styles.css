@@ -725,3 +725,56 @@ p {
     background: rgba(70, 167, 88, 0.2);
     color: #b5e6bf;
 }
+
+/* --- Reconstruction import (component owned by src/import; sized here for the sidebar) --- */
+
+.import-host .draftloom-import {
+    max-width: none;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
+    color: var(--ink);
+}
+
+.import-host .draftloom-import h2 {
+    margin: 0 0 10px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+}
+
+.import-host .import-status {
+    margin: 0 0 6px;
+}
+
+.import-host .draftloom-import small {
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+}
+
+.import-host .import-qr img {
+    width: 200px;
+    height: 200px;
+}
+
+.import-host .import-qr a {
+    color: var(--accent);
+    word-break: break-all;
+}
+
+.import-host .import-preview {
+    max-height: 14rem;
+}
+
+.import-host .import-review ul {
+    margin: 6px 0 8px;
+    padding-left: 18px;
+}
+
+.scale-panel {
+    border-left: 3px solid var(--accent);
+    background: var(--panel-2);
+}
