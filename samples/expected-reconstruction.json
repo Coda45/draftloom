@@ -1,0 +1,14 @@
+{
+    "warehouse-floorplan.png": {
+        "categories": { "Rack": 3, "Table": 2 },
+        "minimumWallSegments": 4,
+        "writtenScaleCue": "1 square = 1 m",
+        "requiresScaleConfirmation": false
+    },
+    "event-studio-no-scale.png": {
+        "categories": { "Chair": 4, "Stage": 1 },
+        "minimumWallSegments": 3,
+        "writtenScaleCue": null,
+        "requiresScaleConfirmation": true
+    }
+}

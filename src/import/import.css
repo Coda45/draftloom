@@ -1,0 +1,9 @@
+.draftloom-import, .draftloom-mobile { color: #ece9e2; background: #202424; border: 1px solid #464c49; border-radius: 10px; padding: 1rem; max-width: 42rem; }
+.draftloom-import button, .draftloom-import select, .draftloom-mobile button, .import-button { border: 1px solid #777; border-radius: 6px; background: #343a38; color: inherit; padding: .55rem .75rem; cursor: pointer; }
+.import-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
+.import-status { min-height: 1.5rem; }
+.import-preview { display: block; max-width: 100%; max-height: 24rem; object-fit: contain; background: white; border-radius: 6px; }
+.import-qr { display: grid; justify-items: start; gap: .5rem; margin: 1rem 0; }
+.import-qr img { width: 240px; height: 240px; }
+.import-review { background: #292e2c; border-radius: 6px; padding: .75rem; margin-top: .75rem; }
+.draftloom-mobile { margin: 2rem auto; text-align: center; }

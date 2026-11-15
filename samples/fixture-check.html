@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Draftloom fixture check</title></head>
+<body><h1>Draftloom fixture check</h1><pre id="results">Running…</pre>
+<img id="warehouse" hidden src="/samples/images/warehouse-floorplan.png" alt="">
+<img id="studio" hidden src="/samples/images/event-studio-no-scale.png" alt="">
+<script type="module">import { analyzePixels } from '/src/import/preprocess/analyzePixels.ts'; window.analyzePixels = analyzePixels;</script>
+<script>
+window.addEventListener('load', () => {
+    try {
+        const fixtures = [['/samples/images/warehouse-floorplan.png', document.querySelector('#warehouse')], ['/samples/images/event-studio-no-scale.png', document.querySelector('#studio')]];
+        const results = [];
+        for (const [path, image] of fixtures) {
+            const scale = Math.min(1, 1000 / Math.max(image.naturalWidth, image.naturalHeight));
+            const canvas = document.createElement('canvas'); canvas.width = Math.round(image.naturalWidth * scale); canvas.height = Math.round(image.naturalHeight * scale);
+            const context = canvas.getContext('2d', { willReadFrequently: true }); context.drawImage(image, 0, 0, canvas.width, canvas.height);
+            const observations = window.analyzePixels(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
+            results.push({ path, walls: observations.wallSegments.length, colors: observations.colorComponents.length });
+        }
+        document.querySelector('#results').textContent = JSON.stringify(results, null, 2); document.body.dataset.complete = 'true';
+    } catch (error) {
+        document.querySelector('#results').textContent = error instanceof Error ? error.stack : String(error); document.body.dataset.complete = 'error';
+    }
+});
+</script></body></html>

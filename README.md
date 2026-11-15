@@ -15,13 +15,11 @@ can inspect and revise the reconstructed scene.
 
 ## Project status
 
-The shared frontend foundation and editor core are working. The repository now
-includes the canonical scene contract, a validated sample scene, synchronized
-2D/3D editing, packing, browser persistence, and native/SVG/GLB export.
-
-The next implementation phase is Developer B's reconstruction work: the
-Express API, laptop/phone photo import, QR upload sessions, and conversion of
-annotated sketches into the same canonical `SceneDocument`.
+The shared editor and reconstruction pipeline are working. The repository now
+includes the canonical scene contract, synchronized 2D/3D editing, browser
+persistence, native/SVG/GLB export, laptop image import, temporary QR phone
+uploads, deterministic image measurement, and optional server-side semantic
+interpretation that produces validated editable scenes.
 
 The P0 target includes:
 
@@ -116,14 +114,52 @@ npm.cmd run build
 npm.cmd run preview
 ```
 
-Developer B will add `npm run server:dev` and `npm start` with the Express
-server so development uses the Vite proxy and production serves the built app
-and `/api` from one origin.
+In another terminal, start the Express API:
 
-No API key is needed to run the editor. Keep real credentials only in an
-ignored local `.env` file and never use a `VITE_*` variable for a secret,
-because Vite exposes those values to browser code. A future `.env.example`
-must contain names and safe placeholders only.
+```powershell
+npm.cmd run server:dev
+```
+
+For a production-style local run, build first and then start the server:
+
+```powershell
+npm.cmd run build
+npm.cmd start
+```
+
+The server exposes `GET /api/health`. `npm` does not require a clean command;
+use `npm.cmd ci` when you intentionally want a clean install from the lockfile.
+
+No API key is needed for generic color-category reconstruction or manual
+editing. Copy `.env.example` to an ignored `.env` to configure the server.
+`GEMINI_API_KEY` and `GEMINI_MODEL` enable handwritten legend interpretation;
+both are server-only. Never use a `VITE_*` variable for a secret because Vite
+exposes those values to browser code.
+
+To test phone upload across devices after Developer A mounts the mobile route,
+build the app and expose the single production server through a trusted HTTPS
+tunnel. For the handoff's port 3000 convention, set `PORT=3000` and set
+`PUBLIC_BASE_URL` to the HTTPS origin ngrok displays, then run:
+
+```powershell
+npm.cmd run build
+npm.cmd start
+ngrok http 3000
+```
+
+If a WinGet portable install is not on `PATH`, locate and run it directly:
+
+```powershell
+$ngrokExe = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\Ngrok.Ngrok_*" -Recurse -Filter ngrok.exe | Select-Object -First 1
+& $ngrokExe.FullName http 3000
+```
+
+Both devices must be able to open that public origin. Upload sessions expire
+after ten minutes by default, accept one image, and are stored only in server
+memory. During two-process local development, the API defaults to port 3001.
+
+Supported source formats are JPEG, PNG, and WebP. Isometric reconstruction is
+intentionally not enabled until the isolated optional B5 module is pursued.
 
 ## Collaboration boundaries
 
