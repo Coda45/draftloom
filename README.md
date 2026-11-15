@@ -138,28 +138,39 @@ exposes those values to browser code.
 
 To test phone upload across devices after Developer A mounts the mobile route,
 build the app and expose the single production server through a trusted HTTPS
-tunnel. For the handoff's port 3000 convention, set `PORT=3000` and set
-`PUBLIC_BASE_URL` to the HTTPS origin ngrok displays, then run:
+tunnel. Keep `PORT=3001`, set `PUBLIC_BASE_URL` to the HTTPS origin ngrok
+displays, then run:
 
 ```powershell
 npm.cmd run build
 npm.cmd start
-ngrok http 3000
+ngrok http 3001
 ```
 
 If a WinGet portable install is not on `PATH`, locate and run it directly:
 
 ```powershell
 $ngrokExe = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\Ngrok.Ngrok_*" -Recurse -Filter ngrok.exe | Select-Object -First 1
-& $ngrokExe.FullName http 3000
+& $ngrokExe.FullName http 3001
 ```
 
 Both devices must be able to open that public origin. Upload sessions expire
 after ten minutes by default, accept one image, and are stored only in server
-memory. During two-process local development, the API defaults to port 3001.
+memory. Both local development and the production-style demo use port 3001 for
+the Express server.
 
 Supported source formats are JPEG, PNG, and WebP. Isometric reconstruction is
 intentionally not enabled until the isolated optional B5 module is pursued.
+For floor plans, objects may be either solid colored rectangles or closed
+colored rectangle outlines; use the same color style in the separate legend.
+The browser preprocessor downsizes and rotates images, adapts its dark-line
+threshold to page exposure, tolerates small pen gaps and slight near-axis
+camera skew, suppresses likely device-frame edges, and removes regularly spaced
+graph-paper lines while retaining thicker room walls. Detected wall endpoints
+are fitted to nearby perpendicular walls so intended corners remain connected
+despite small photographic offsets. It does not
+currently perform automatic four-corner document perspective correction, so
+crop device borders and photograph the page as square-on as practical.
 
 ## Collaboration boundaries
 

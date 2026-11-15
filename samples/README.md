@@ -16,7 +16,7 @@ explicitly prohibited scale text.
 Open `/samples/fixture-check.html` through Vite to run the deterministic Canvas
 preprocessor against both actual images. The normal automated test suite also
 uses two synthetic pixel layouts so regressions do not depend on image codecs.
-At a 1000-pixel maximum side, the current browser check measures eight wall
+At a 1000-pixel maximum side, the current browser check measures six wall
 candidates and seven color regions in the warehouse image, and six wall
 candidates and seven color regions in the event-studio image. Each set of
 seven includes the five intended object marks and the two legend swatches.

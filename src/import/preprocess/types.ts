@@ -13,6 +13,7 @@ export interface ColorComponent {
     colorHex: string;
     pixelCount: number;
     confidence: number;
+    style?: 'filled' | 'outline';
 }
 
 export interface ImageObservations {

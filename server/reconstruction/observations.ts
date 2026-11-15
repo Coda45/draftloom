@@ -1,5 +1,5 @@
 import { ApiError } from '../api/errors';
-import type { ImageObservations } from '../../src/import/preprocess/types';
+import type { ColorComponent, ImageObservations } from '../../src/import/preprocess/types';
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
@@ -21,8 +21,9 @@ export function parseObservations(raw: unknown): ImageObservations {
     });
     const colorComponents = input.colorComponents.map((item, index) => {
         const component = item as Record<string, unknown>; const bounds = component?.bounds as Record<string, unknown>;
-        if (!component || !bounds || !finite(bounds.x) || !finite(bounds.y) || !finite(bounds.width) || !finite(bounds.height) || bounds.width <= 0 || bounds.height <= 0 || typeof component.colorHex !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(component.colorHex) || !finite(component.pixelCount) || !finite(component.confidence)) throw new ApiError(400, 'OBSERVATIONS_INVALID', `Color observation ${index} is invalid.`);
-        return { id: String(component.id || `color-${index + 1}`).slice(0, 100), bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }, colorHex: component.colorHex.toUpperCase(), pixelCount: component.pixelCount, confidence: Math.min(1, Math.max(0, component.confidence)) };
+        if (!component || !bounds || !finite(bounds.x) || !finite(bounds.y) || !finite(bounds.width) || !finite(bounds.height) || bounds.width <= 0 || bounds.height <= 0 || typeof component.colorHex !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(component.colorHex) || !finite(component.pixelCount) || !finite(component.confidence) || (component.style !== undefined && component.style !== 'filled' && component.style !== 'outline')) throw new ApiError(400, 'OBSERVATIONS_INVALID', `Color observation ${index} is invalid.`);
+        const style: ColorComponent['style'] = component.style === 'filled' || component.style === 'outline' ? component.style : undefined;
+        return { id: String(component.id || `color-${index + 1}`).slice(0, 100), bounds: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }, colorHex: component.colorHex.toUpperCase(), pixelCount: component.pixelCount, confidence: Math.min(1, Math.max(0, component.confidence)), ...(style ? { style } : {}) };
     });
     return { version: 1, widthPx: input.widthPx, heightPx: input.heightPx, wallSegments, colorComponents };
 }
