@@ -1,0 +1,46 @@
+{
+    "contractVersion": 1,
+    "issues": [
+        {
+            "id": "issue-1",
+            "severity": "warning",
+            "code": "low-confidence-object",
+            "message": "The blue rectangle near the west wall was read as a Rack, but the legend entry was hard to read.",
+            "objectIds": ["recon-box-2"]
+        },
+        {
+            "id": "issue-2",
+            "severity": "info",
+            "code": "height-assumed",
+            "message": "No height was annotated for walls; assumed 3.0 m."
+        }
+    ],
+    "scene": {
+        "schemaVersion": 1,
+        "id": "scene-recon-example",
+        "name": "Reconstructed warehouse bay",
+        "units": "meters",
+        "createdAt": "2026-11-14T00:00:00.000Z",
+        "updatedAt": "2026-11-14T00:00:00.000Z",
+        "settings": { "gridSizeM": 0.5, "gridSnap": false, "snapAngle": 90, "snapToleranceDeg": 8 },
+        "source": {
+            "kind": "top-down",
+            "fileName": "bay-sketch.jpg",
+            "widthPx": 1200,
+            "heightPx": 900,
+            "calibration": { "method": "reconstructed", "pixelToWorld": [0.01, 0, 0, 0, 0.01, 0] }
+        },
+        "definitions": [
+            { "id": "recon-def-rack", "name": "Rack", "color": "#3d6fb6", "defaultDimensions": [2.4, 2.0, 0.9], "category": "blue" }
+        ],
+        "objects": [
+            { "kind": "wall", "id": "recon-wall-1", "start": [0.2, 0.2], "end": [11.8, 0.2], "heightM": 3, "thicknessM": 0.2, "provenance": { "origin": "reconstructed", "confidence": 0.93, "sourcePolygonPx": [[20, 20], [1180, 20]] } },
+            { "kind": "wall", "id": "recon-wall-2", "start": [11.8, 0.2], "end": [11.8, 8.8], "heightM": 3, "thicknessM": 0.2, "provenance": { "origin": "reconstructed", "confidence": 0.9 } },
+            { "kind": "wall", "id": "recon-wall-3", "start": [11.8, 8.8], "end": [0.2, 8.8], "heightM": 3, "thicknessM": 0.2, "provenance": { "origin": "reconstructed", "confidence": 0.88 } },
+            { "kind": "wall", "id": "recon-wall-4", "start": [0.2, 8.8], "end": [0.2, 0.2], "heightM": 3, "thicknessM": 0.2, "provenance": { "origin": "reconstructed", "confidence": 0.91 } },
+            { "kind": "box", "id": "recon-box-1", "definitionId": "recon-def-rack", "position": [2.5, 0, 1.2], "yaw": 0, "provenance": { "origin": "reconstructed", "confidence": 0.86, "note": "Legend: blue = Rack" } },
+            { "kind": "box", "id": "recon-box-2", "definitionId": "recon-def-rack", "position": [1.0, 0, 5.0], "yaw": 1.5707963267948966, "provenance": { "origin": "reconstructed", "confidence": 0.42, "inferred": true } },
+            { "kind": "region", "id": "recon-region-1", "name": "Open floor", "polygon": [[4, 3], [11.4, 3], [11.4, 8.4], [4, 8.4]], "color": "#6aa84f", "provenance": { "origin": "reconstructed", "confidence": 0.8 } }
+        ]
+    }
+}

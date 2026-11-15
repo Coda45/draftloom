@@ -1,2 +1,9 @@
 # Local planning and handoff documents
 docs/
+
+# Dependencies and build output
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
