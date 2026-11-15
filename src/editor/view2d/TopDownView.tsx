@@ -39,6 +39,7 @@ type Drag =
 interface Props {
     tool: Tool;
     activeDefinitionId: string | null;
+    gridSnap: boolean;
     overlay: OverlayImage | null;
     /** Increment to refit the view to the scene. */
     fitRequest: number;
@@ -69,7 +70,7 @@ function fitTransform(scene: SceneDocument, width: number, height: number): View
     };
 }
 
-export function TopDownView({ tool, activeDefinitionId, overlay, fitRequest, onToolDone }: Props) {
+export function TopDownView({ tool, activeDefinitionId, gridSnap, overlay, fitRequest, onToolDone }: Props) {
     const { store, run, notify } = useEditor();
     const { displayScene: scene, selectedId } = useStoreState();
     const svgRef = useRef<SVGSVGElement>(null);
@@ -130,17 +131,17 @@ export function TopDownView({ tool, activeDefinitionId, overlay, fitRequest, onT
     }, []);
 
     const snapPoint = useCallback(
-        (p: Vec2): Vec2 => (settings.gridSnap ? snapToGrid(p, settings.gridSizeM) : p),
-        [settings.gridSnap, settings.gridSizeM],
+        (p: Vec2): Vec2 => (gridSnap ? snapToGrid(p, settings.gridSizeM) : p),
+        [gridSnap, settings.gridSizeM],
     );
 
     // Snap a drawn endpoint by angle relative to an anchor, then optionally to the grid.
     const snapFrom = useCallback(
         (anchor: Vec2, p: Vec2): Vec2 => {
-            const angled = snapAngle(anchor, p, settings.snapAngle, settings.snapToleranceDeg);
-            return settings.gridSnap && settings.snapAngle === 'free' ? snapToGrid(angled, settings.gridSizeM) : angled;
+            const angled = snapAngle(anchor, p, settings.snapAngleDeg, settings.snapToleranceDeg);
+            return gridSnap && settings.snapAngleDeg === 0 ? snapToGrid(angled, settings.gridSizeM) : angled;
         },
-        [settings],
+        [gridSnap, settings],
     );
 
     // Wheel zoom around the cursor (native listener so we can preventDefault).
@@ -176,7 +177,7 @@ export function TopDownView({ tool, activeDefinitionId, overlay, fitRequest, onT
             }
             const id = newId('region');
             const count = scene.objects.filter((o) => o.kind === 'region').length + 1;
-            if (run({ type: 'addRegion', region: { kind: 'region', id, name: `Region ${count}`, polygon: pts, provenance: { origin: 'manual' } } })) {
+            if (run({ type: 'addRegion', region: { kind: 'region', id, name: `Region ${count}`, polygon: pts, provenance: { method: 'manual' } } })) {
                 store.setSelectedId(id);
                 setRegionPts([]);
                 onToolDone?.();
@@ -260,7 +261,7 @@ export function TopDownView({ tool, activeDefinitionId, overlay, fitRequest, onT
             }
             const p = snapPoint(raw);
             const id = newId('box');
-            if (run({ type: 'addBox', box: { kind: 'box', id, definitionId: activeDefinitionId, position: [p[0], 0, p[1]], yaw: 0, provenance: { origin: 'manual' } } })) {
+            if (run({ type: 'addBox', box: { kind: 'box', id, definitionId: activeDefinitionId, position: [p[0], 0, p[1]], rotationY: 0, provenance: { method: 'manual' } } })) {
                 store.setSelectedId(id);
             }
         } else if (tool === 'wall') {
@@ -276,7 +277,7 @@ export function TopDownView({ tool, activeDefinitionId, overlay, fitRequest, onT
             const id = newId('wall');
             const ok = run({
                 type: 'addWall',
-                wall: { kind: 'wall', id, start: wallStart, end, heightM: DEFAULT_WALL_HEIGHT_M, thicknessM: DEFAULT_WALL_THICKNESS_M, provenance: { origin: 'manual' } },
+                wall: { kind: 'wall', id, start: wallStart, end, baseY: 0, height: DEFAULT_WALL_HEIGHT_M, thickness: DEFAULT_WALL_THICKNESS_M, provenance: { method: 'manual' } },
             });
             if (ok) {
                 store.setSelectedId(id);
@@ -310,14 +311,14 @@ export function TopDownView({ tool, activeDefinitionId, overlay, fitRequest, onT
         } else if (d.kind === 'wall') {
             let dx = raw[0] - d.start[0];
             let dz = raw[1] - d.start[1];
-            if (settings.gridSnap) [dx, dz] = snapToGrid([dx, dz], settings.gridSizeM);
+            if (gridSnap) [dx, dz] = snapToGrid([dx, dz], settings.gridSizeM);
             cmd = { type: 'moveWall', id: d.id, start: [d.origStart[0] + dx, d.origStart[1] + dz], end: [d.origEnd[0] + dx, d.origEnd[1] + dz] };
         } else if (d.kind === 'wallEnd') {
             cmd = { type: 'moveWallEndpoint', id: d.id, endpoint: d.endpoint, point: snapFrom(d.anchor, raw) };
         } else if (d.kind === 'region') {
             let dx = raw[0] - d.start[0];
             let dz = raw[1] - d.start[1];
-            if (settings.gridSnap) [dx, dz] = snapToGrid([dx, dz], settings.gridSizeM);
+            if (gridSnap) [dx, dz] = snapToGrid([dx, dz], settings.gridSizeM);
             cmd = { type: 'setRegionPolygon', id: d.id, polygon: d.orig.map(([x, z]) => [x + dx, z + dz] as Vec2) };
         } else {
             cmd = { type: 'moveRegionVertex', id: d.id, index: d.index, point: snapPoint(raw) };
@@ -340,7 +341,7 @@ export function TopDownView({ tool, activeDefinitionId, overlay, fitRequest, onT
     const handleR = HANDLE_PX / view.zoom;
     const fontSize = 12 / view.zoom;
     const strokeW = 1.5 / view.zoom;
-    const defsById = useMemo(() => new Map(scene.definitions.map((d) => [d.id, d])), [scene.definitions]);
+    const defsById = useMemo(() => new Map(Object.entries(scene.definitions)), [scene.definitions]);
     const selected = scene.objects.find((o) => o.id === selectedId) ?? null;
     const grid = settings.gridSizeM;
 
@@ -376,7 +377,7 @@ export function TopDownView({ tool, activeDefinitionId, overlay, fitRequest, onT
                         width={overlay.widthPx}
                         height={overlay.heightPx}
                         opacity={overlay.opacity}
-                        transform={`matrix(${overlay.matrix[0]} ${overlay.matrix[3]} ${overlay.matrix[1]} ${overlay.matrix[4]} ${overlay.matrix[2]} ${overlay.matrix[5]})`}
+                        transform={`matrix(${overlay.matrix.join(' ')})`}
                         preserveAspectRatio="none"
                         pointerEvents="none"
                     />
@@ -387,7 +388,7 @@ export function TopDownView({ tool, activeDefinitionId, overlay, fitRequest, onT
 
                 {scene.objects.map((o) => {
                     if (o.kind !== 'region') return null;
-                    const color = o.color ?? '#6aa84f';
+                    const color = '#6aa84f';
                     const sel = o.id === selectedId;
                     const [cx, cz] = polygonCentroid(o.polygon);
                     return (
@@ -431,10 +432,10 @@ export function TopDownView({ tool, activeDefinitionId, overlay, fitRequest, onT
                     const color = def?.color ?? '#999999';
                     const fp = boxFootprint(o, scene.definitions);
                     const sel = o.id === selectedId;
-                    const uncertain = o.provenance?.inferred || (o.provenance?.confidence ?? 1) < 0.6;
+                    const uncertain = o.provenance?.method === 'inferred' || (o.provenance?.confidence ?? 1) < 0.6;
                     // Local +X axis marker shows facing (yaw) in the top-down view.
                     const [w] = boxDimensions(o, scene.definitions);
-                    const front: Vec2 = [o.position[0] + Math.cos(o.yaw) * (w / 2), o.position[2] - Math.sin(o.yaw) * (w / 2)];
+                    const front: Vec2 = [o.position[0] + Math.cos(o.rotationY) * (w / 2), o.position[2] - Math.sin(o.rotationY) * (w / 2)];
                     return (
                         <g key={o.id} className="obj" onPointerDown={(e) => onObjectPointerDown(e, o.id)}>
                             <polygon

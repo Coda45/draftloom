@@ -30,8 +30,11 @@ describe('native JSON', () => {
     });
 
     it('accepts a ReconstructionResult file and reports bad JSON', () => {
-        const parsed = parseProjectFile(JSON.stringify({ contractVersion: 1, scene: sampleScene(), issues: [{ id: 'i1', severity: 'warning', code: 'x', message: 'Check wall' }] }));
+        const parsed = parseProjectFile(JSON.stringify({ modeUsed: 'floorplan', scene: sampleScene(), issues: [{ severity: 'warning', code: 'x', message: 'Check wall' }], requiresScaleConfirmation: false }));
         expect(parsed.ok && parsed.kind === 'reconstruction' && parsed.result.issues).toHaveLength(1);
+        if (parsed.ok && parsed.kind === 'reconstruction') expect(parsed.result.contractVersion).toBe(1);
+        const future = parseProjectFile(JSON.stringify({ contractVersion: 2, modeUsed: 'floorplan', scene: sampleScene(), issues: [], requiresScaleConfirmation: false }));
+        expect(future.ok).toBe(false);
         const bad = parseProjectFile('{not json');
         expect(bad.ok).toBe(false);
     });
@@ -78,7 +81,7 @@ describe('GLB export', () => {
 
     it('makes duplicate names unique', async () => {
         const scene = sampleScene();
-        scene.objects = scene.objects.filter((o) => o.kind === 'box').map((o) => ({ ...o, name: undefined }));
+        scene.objects = scene.objects.filter((o) => o.kind === 'box').map((o) => ({ ...o, name: undefined, provenance: { method: 'manual' as const } }));
         const json = readGlbJson(await sceneToGlb(scene));
         expect(json.nodes.map((n) => n.name)).toEqual(['Desk', 'Desk 2', 'Storage Rack']);
     });

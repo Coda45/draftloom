@@ -15,9 +15,13 @@ can inspect and revise the reconstructed scene.
 
 ## Project status
 
-The project is in its foundation phase. The architecture and cross-team
-contracts have been agreed upon; application scaffolding and the first sample
-scene are the next milestones.
+The shared frontend foundation and editor core are working. The repository now
+includes the canonical scene contract, a validated sample scene, synchronized
+2D/3D editing, packing, browser persistence, and native/SVG/GLB export.
+
+The next implementation phase is Developer B's reconstruction work: the
+Express API, laptop/phone photo import, QR upload sessions, and conversion of
+annotated sketches into the same canonical `SceneDocument`.
 
 The P0 target includes:
 
@@ -61,6 +65,8 @@ environment variables and must never be committed.
   store and selection state.
 - Reconstruction produces editable scene data with provenance and warnings,
   never a flattened screenshot or opaque replacement schema.
+- Reconstruction responses use `contractVersion: 1`; the native scene retains
+  its independent `schemaVersion: 1` for project-file migrations.
 - AI failure must not prevent manual creation, editing, saving, or export.
 
 ## Planned repository layout
@@ -89,24 +95,35 @@ reflected in source types, tests, and this README as the project evolves.
 
 ## Development
 
-Node.js 22 or newer is required. The repository has not been scaffolded yet,
-so installation and development commands will be added with the foundation
-commit.
-
-The intended script interface is:
+Node.js 22 or newer is required. Install the exact locked dependencies and
+start the frontend from PowerShell:
 
 ```powershell
-npm run dev
-npm run server:dev
-npm run build
-npm start
-npm run typecheck
-npm test
+npm.cmd ci
+npm.cmd run dev
 ```
 
-Do not assume these commands are available until `package.json` lands. When
-their exact behavior is implemented, document any required environment
-variables and the local frontend/API URLs here.
+Vite serves the app at `http://localhost:5173` and proxies `/api` to
+`http://localhost:3001`. The API target can be changed with
+`DRAFTLOOM_API_URL`; this is a server address, not a credential.
+
+Current verification and production-frontend commands are:
+
+```powershell
+npm.cmd run typecheck
+npm.cmd test
+npm.cmd run build
+npm.cmd run preview
+```
+
+Developer B will add `npm run server:dev` and `npm start` with the Express
+server so development uses the Vite proxy and production serves the built app
+and `/api` from one origin.
+
+No API key is needed to run the editor. Keep real credentials only in an
+ignored local `.env` file and never use a `VITE_*` variable for a secret,
+because Vite exposes those values to browser code. A future `.env.example`
+must contain names and safe placeholders only.
 
 ## Collaboration boundaries
 

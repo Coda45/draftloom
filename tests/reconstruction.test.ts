@@ -7,7 +7,7 @@ import { SceneStore } from '../src/scene/store';
 import type { ReconstructionResult } from '../src/shared/reconstruction-contract';
 import { sampleScene } from './helpers';
 
-const result = () => structuredClone(example) as ReconstructionResult;
+const result = () => structuredClone(example) as unknown as ReconstructionResult;
 
 describe('applyReconstruction', () => {
     it('validates, replaces the document unchanged, and returns issues', async () => {
@@ -29,14 +29,23 @@ describe('applyReconstruction', () => {
         expect(store.getScene()).toBe(before);
     });
 
-    it('stores the source image under scene.source.imageKey', async () => {
+    it('rejects an unsupported reconstruction contract version', async () => {
+        const store = new SceneStore(sampleScene());
+        const before = store.getScene();
+        const future = { ...result(), contractVersion: 2 as 1 };
+        const r = await applyReconstruction(store, null, future);
+        expect(r.ok).toBe(false);
+        expect(store.getScene()).toBe(before);
+    });
+
+    it('stores the source image under scene.sources[0].imageKey', async () => {
         const storage = new ProjectStorage(new IDBFactory());
         const store = new SceneStore(sampleScene());
         const r = await applyReconstruction(store, storage, result(), new Blob(['png-bytes'], { type: 'image/png' }));
         expect(r.ok).toBe(true);
-        const key = store.getScene().source?.imageKey;
+        const key = store.getScene().sources[0]?.imageKey;
         expect(key).toMatch(/^img-/);
-        expect(store.getScene().source?.calibration?.method).toBe('reconstructed');
+        expect(store.getScene().sources[0]?.pixelToWorldXZ).toEqual([0.01, 0, 0, 0.01, 0, 0]);
         expect(await storage.getBlob(key!)).not.toBeNull();
     });
 });

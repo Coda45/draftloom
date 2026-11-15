@@ -67,9 +67,9 @@ export function packRegion(scene: SceneDocument, options: PackingOptions): Packi
     const problem = polygonProblem(region.polygon);
     if (problem) return empty(`The region is invalid: ${problem}.`);
 
-    const def = scene.definitions.find((d) => d.id === options.definitionId);
+    const def = scene.definitions[options.definitionId];
     if (!def) return empty('Choose an object definition to place.');
-    const [w, h, d] = def.defaultDimensions;
+    const [w, h, d] = def.dimensions;
     if (!(w > 0 && d > 0 && h > 0)) return empty('The object definition must have positive dimensions.');
 
     const gap = options.gapM;
@@ -142,8 +142,8 @@ export function packRegion(scene: SceneDocument, options: PackingOptions): Packi
         id: newId('box'),
         definitionId: def.id,
         position: [c[0], 0, c[1]],
-        yaw: best.yaw,
-        provenance: { origin: 'packing', note: `Arranged in ${region.name}` },
+        rotationY: best.yaw,
+        provenance: { method: 'manual', notes: [`Arranged in ${region.name}`] },
     }));
     return { boxes, yaw: best.yaw, candidatesTested: tested, diagnostics };
 }

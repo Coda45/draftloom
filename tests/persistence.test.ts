@@ -60,7 +60,7 @@ describe('Autosave', () => {
         const store = new SceneStore(sampleScene());
         const autosave = new Autosave(store, storage, { debounceMs: 10 });
         autosave.start();
-        store.dispatch({ type: 'setWallHeight', id: 'wall-north', heightM: 3 });
+        store.dispatch({ type: 'setWallHeight', id: 'wall-north', height: 3 });
         await autosave.flush();
         expect(autosave.getStatus()).toEqual({ state: 'error', message: 'Autosave failed: QuotaExceededError' });
         autosave.stop();

@@ -301,19 +301,19 @@ export function convexShapeInsidePolygon(shape: Vec2[], polygon: Vec2[]): boolea
 // --- Scene-aware helpers ---
 
 export function findDefinition(scene: SceneDocument, id: string): ObjectDefinition | undefined {
-    return scene.definitions.find((d) => d.id === id);
+    return scene.definitions[id];
 }
 
 /** Effective dimensions of a box: its override, else its definition's default. */
-export function boxDimensions(box: BoxInstance, definitions: ObjectDefinition[]): Dimensions {
+export function boxDimensions(box: BoxInstance, definitions: Record<string, ObjectDefinition>): Dimensions {
     if (box.dimensionsOverride) return box.dimensionsOverride;
-    const def = definitions.find((d) => d.id === box.definitionId);
-    return def ? def.defaultDimensions : [1, 1, 1];
+    const def = definitions[box.definitionId];
+    return def ? def.dimensions : [1, 1, 1];
 }
 
-export function boxFootprint(box: BoxInstance, definitions: ObjectDefinition[]): Vec2[] {
+export function boxFootprint(box: BoxInstance, definitions: Record<string, ObjectDefinition>): Vec2[] {
     const [w, , d] = boxDimensions(box, definitions);
-    return rectangleCorners([box.position[0], box.position[2]], w, d, box.yaw);
+    return rectangleCorners([box.position[0], box.position[2]], w, d, box.rotationY);
 }
 
 export function wallLength(wall: WallSegment): number {
@@ -325,7 +325,7 @@ export function wallFootprint(wall: WallSegment): Vec2[] {
     const len = wallLength(wall);
     if (len < 1e-6) return [];
     const dir: Vec2 = [(wall.end[0] - wall.start[0]) / len, (wall.end[1] - wall.start[1]) / len];
-    const n: Vec2 = [-dir[1] * (wall.thicknessM / 2), dir[0] * (wall.thicknessM / 2)];
+    const n: Vec2 = [-dir[1] * (wall.thickness / 2), dir[0] * (wall.thickness / 2)];
     return [add(wall.start, n), add(wall.end, n), sub(wall.end, n), sub(wall.start, n)];
 }
 
@@ -338,8 +338,8 @@ export function yawFromDirection(dx: number, dz: number): number {
  * Snap the direction from `from` to `to` to the nearest allowed increment when
  * within tolerance. Angles are measured with atan2 in the X/Z plane.
  */
-export function snapAngle(from: Vec2, to: Vec2, increment: number | 'free', toleranceDeg: number): Vec2 {
-    if (increment === 'free') return to;
+export function snapAngle(from: Vec2, to: Vec2, increment: number, toleranceDeg: number): Vec2 {
+    if (increment === 0) return to;
     const dx = to[0] - from[0];
     const dz = to[1] - from[1];
     const len = Math.hypot(dx, dz);

@@ -18,7 +18,7 @@ import {
     type WallSegment,
 } from './schema';
 
-export type DefinitionPatch = Partial<Pick<ObjectDefinition, 'name' | 'color' | 'defaultDimensions' | 'category'>>;
+export type DefinitionPatch = Partial<Pick<ObjectDefinition, 'name' | 'color' | 'dimensions' | 'assetId'>>;
 
 export type SceneCommand =
     | { type: 'loadScene'; scene: SceneDocument }
@@ -34,14 +34,15 @@ export type SceneCommand =
     | { type: 'deleteObject'; id: string }
     | { type: 'renameObject'; id: string; name: string }
     | { type: 'moveBox'; id: string; position: Vec3 }
-    | { type: 'setBoxRotation'; id: string; yaw: number }
+    | { type: 'setBoxRotation'; id: string; rotationY: number }
     | { type: 'setBoxDefinition'; id: string; definitionId: string }
     | { type: 'setInstanceDimensionsOverride'; id: string; dimensions: Dimensions }
     | { type: 'clearInstanceDimensionsOverride'; id: string }
     | { type: 'moveWallEndpoint'; id: string; endpoint: 'start' | 'end'; point: Vec2 }
     | { type: 'moveWall'; id: string; start: Vec2; end: Vec2 }
-    | { type: 'setWallHeight'; id: string; heightM: number }
-    | { type: 'setWallThickness'; id: string; thicknessM: number }
+    | { type: 'setWallBaseY'; id: string; baseY: number }
+    | { type: 'setWallHeight'; id: string; height: number }
+    | { type: 'setWallThickness'; id: string; thickness: number }
     | { type: 'moveRegionVertex'; id: string; index: number; point: Vec2 }
     | { type: 'setRegionPolygon'; id: string; polygon: Vec2[] }
     | { type: 'renameRegion'; id: string; name: string }
@@ -56,12 +57,14 @@ export function createEmptyScene(name = 'Untitled project'): SceneDocument {
         schemaVersion: SCENE_SCHEMA_VERSION,
         id: newId('scene'),
         name,
-        units: 'meters',
-        createdAt: now,
+        units: 'm',
+        upAxis: 'Y',
         updatedAt: now,
         settings: { ...DEFAULT_SETTINGS },
-        definitions: [],
+        definitions: {},
         objects: [],
+        sources: [],
+        createdAt: now,
     };
 }
 
@@ -76,7 +79,7 @@ function assertFinite(values: number[], what: string): void {
 }
 
 function assertNewIds(scene: SceneDocument, ids: string[]): void {
-    const existing = new Set([...scene.objects.map((o) => o.id), ...scene.definitions.map((d) => d.id)]);
+    const existing = new Set([...scene.objects.map((o) => o.id), ...Object.keys(scene.definitions), ...scene.sources.map((s) => s.id)]);
     for (const id of ids) {
         if (existing.has(id)) throw new SceneCommandError(`ID "${id}" already exists.`);
         existing.add(id);
@@ -121,36 +124,40 @@ function reduce(scene: SceneDocument, cmd: SceneCommand): SceneDocument {
 
         case 'addDefinition':
             assertNewIds(scene, [cmd.definition.id]);
-            assertPositiveDims(cmd.definition.defaultDimensions);
-            return { ...scene, definitions: [...scene.definitions, cmd.definition] };
+            assertPositiveDims(cmd.definition.dimensions);
+            return { ...scene, definitions: { ...scene.definitions, [cmd.definition.id]: cmd.definition } };
         case 'editDefinition': {
-            if (!scene.definitions.some((d) => d.id === cmd.id)) throw new SceneCommandError(`No definition with ID "${cmd.id}".`);
-            if (cmd.patch.defaultDimensions) assertPositiveDims(cmd.patch.defaultDimensions);
+            const definition = scene.definitions[cmd.id];
+            if (!definition) throw new SceneCommandError(`No definition with ID "${cmd.id}".`);
+            if (cmd.patch.dimensions) assertPositiveDims(cmd.patch.dimensions);
             // Instances reference the definition, so non-overridden instances follow automatically
             // while instances with dimensionsOverride keep their own values.
             return {
                 ...scene,
-                definitions: scene.definitions.map((d) => (d.id === cmd.id ? { ...d, ...cmd.patch } : d)),
+                definitions: { ...scene.definitions, [cmd.id]: { ...definition, ...cmd.patch } },
             };
         }
         case 'deleteDefinition': {
             if (scene.objects.some((o) => o.kind === 'box' && o.definitionId === cmd.id)) {
                 throw new SceneCommandError('Delete or reassign the boxes that use this definition first.');
             }
-            return { ...scene, definitions: scene.definitions.filter((d) => d.id !== cmd.id) };
+            const definitions = { ...scene.definitions };
+            delete definitions[cmd.id];
+            return { ...scene, definitions };
         }
 
         case 'addBox':
             assertNewIds(scene, [cmd.box.id]);
-            if (!scene.definitions.some((d) => d.id === cmd.box.definitionId)) {
+            if (!scene.definitions[cmd.box.definitionId]) {
                 throw new SceneCommandError(`Definition "${cmd.box.definitionId}" does not exist.`);
             }
-            assertFinite([...cmd.box.position, cmd.box.yaw], 'Box position and yaw');
+            assertFinite([...cmd.box.position, cmd.box.rotationY], 'Box position and rotation');
             return { ...scene, objects: [...scene.objects, cmd.box] };
         case 'addWall':
             assertNewIds(scene, [cmd.wall.id]);
             assertFinite([...cmd.wall.start, ...cmd.wall.end], 'Wall endpoints');
-            if (!(cmd.wall.heightM > 0) || !(cmd.wall.thicknessM > 0)) throw new SceneCommandError('Wall height and thickness must be positive.');
+            assertFinite([...cmd.wall.start, ...cmd.wall.end, cmd.wall.baseY], 'Wall geometry');
+            if (!(cmd.wall.height > 0) || !(cmd.wall.thickness > 0)) throw new SceneCommandError('Wall height and thickness must be positive.');
             return { ...scene, objects: [...scene.objects, cmd.wall] };
         case 'addRegion': {
             assertNewIds(scene, [cmd.region.id]);
@@ -162,18 +169,21 @@ function reduce(scene: SceneDocument, cmd: SceneCommand): SceneDocument {
             if (!scene.objects.some((o) => o.id === cmd.id)) return scene;
             return { ...scene, objects: scene.objects.filter((o) => o.id !== cmd.id) };
         case 'renameObject': {
-            const objects = scene.objects.map((o) => (o.id === cmd.id ? { ...o, name: cmd.name } : o));
+            const objects = scene.objects.map((o) => {
+                if (o.id !== cmd.id || o.kind === 'region') return o;
+                const name = cmd.name.trim();
+                return { ...o, name: name || undefined };
+            });
             return { ...scene, objects };
         }
-
         case 'moveBox':
             assertFinite(cmd.position, 'Box position');
             return updateObject(scene, cmd.id, 'box', (b) => ({ ...b, position: [...cmd.position] as Vec3 }));
         case 'setBoxRotation':
-            assertFinite([cmd.yaw], 'Yaw');
-            return updateObject(scene, cmd.id, 'box', (b) => ({ ...b, yaw: cmd.yaw }));
+            assertFinite([cmd.rotationY], 'Rotation');
+            return updateObject(scene, cmd.id, 'box', (b) => ({ ...b, rotationY: cmd.rotationY }));
         case 'setBoxDefinition':
-            if (!scene.definitions.some((d) => d.id === cmd.definitionId)) throw new SceneCommandError(`Definition "${cmd.definitionId}" does not exist.`);
+            if (!scene.definitions[cmd.definitionId]) throw new SceneCommandError(`Definition "${cmd.definitionId}" does not exist.`);
             return updateObject(scene, cmd.id, 'box', (b) => ({ ...b, definitionId: cmd.definitionId }));
         case 'setInstanceDimensionsOverride':
             assertPositiveDims(cmd.dimensions);
@@ -191,12 +201,15 @@ function reduce(scene: SceneDocument, cmd: SceneCommand): SceneDocument {
         case 'moveWall':
             assertFinite([...cmd.start, ...cmd.end], 'Wall endpoints');
             return updateObject(scene, cmd.id, 'wall', (w) => ({ ...w, start: [...cmd.start] as Vec2, end: [...cmd.end] as Vec2 }));
+        case 'setWallBaseY':
+            if (!Number.isFinite(cmd.baseY)) throw new SceneCommandError('Wall base Y must be finite.');
+            return updateObject(scene, cmd.id, 'wall', (w) => ({ ...w, baseY: cmd.baseY }));
         case 'setWallHeight':
-            if (!(cmd.heightM > 0) || !Number.isFinite(cmd.heightM)) throw new SceneCommandError('Wall height must be positive.');
-            return updateObject(scene, cmd.id, 'wall', (w) => ({ ...w, heightM: cmd.heightM }));
+            if (!(cmd.height > 0) || !Number.isFinite(cmd.height)) throw new SceneCommandError('Wall height must be positive.');
+            return updateObject(scene, cmd.id, 'wall', (w) => ({ ...w, height: cmd.height }));
         case 'setWallThickness':
-            if (!(cmd.thicknessM > 0) || !Number.isFinite(cmd.thicknessM)) throw new SceneCommandError('Wall thickness must be positive.');
-            return updateObject(scene, cmd.id, 'wall', (w) => ({ ...w, thicknessM: cmd.thicknessM }));
+            if (!(cmd.thickness > 0) || !Number.isFinite(cmd.thickness)) throw new SceneCommandError('Wall thickness must be positive.');
+            return updateObject(scene, cmd.id, 'wall', (w) => ({ ...w, thickness: cmd.thickness }));
 
         case 'moveRegionVertex':
             return updateObject(scene, cmd.id, 'region', (r) => {
@@ -219,16 +232,13 @@ function reduce(scene: SceneDocument, cmd: SceneCommand): SceneDocument {
             if (cmd.boxes.length === 0) return scene;
             assertNewIds(scene, cmd.boxes.map((b) => b.id));
             for (const b of cmd.boxes) {
-                if (!scene.definitions.some((d) => d.id === b.definitionId)) throw new SceneCommandError(`Definition "${b.definitionId}" does not exist.`);
+                if (!scene.definitions[b.definitionId]) throw new SceneCommandError(`Definition "${b.definitionId}" does not exist.`);
             }
             return { ...scene, objects: [...scene.objects, ...cmd.boxes] };
         }
         case 'setSource':
-            if (cmd.source === undefined) {
-                const { source: _removed, ...rest } = scene;
-                return rest;
-            }
-            return { ...scene, source: cmd.source };
+            if (cmd.source === undefined) return { ...scene, sources: scene.sources.slice(1) };
+            return { ...scene, sources: [cmd.source, ...scene.sources.slice(1)] };
     }
 }
 

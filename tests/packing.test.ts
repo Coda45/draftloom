@@ -8,7 +8,7 @@ import { sampleScene } from './helpers';
 
 function withRegion(polygon: Vec2[], objects: SceneDocument['objects'] = []): SceneDocument {
     const s = sampleScene();
-    s.definitions.push({ id: 'def-crate', name: 'Crate', color: '#888888', defaultDimensions: [1, 1, 1] });
+    s.definitions['def-crate'] = { id: 'def-crate', name: 'Crate', color: '#888888', dimensions: [1, 1, 1] };
     s.objects = [...objects, { kind: 'region', id: 'r', name: 'Zone', polygon }];
     return s;
 }
@@ -47,7 +47,7 @@ describe('packRegion', () => {
 
     it('rotates rectangular objects when that fits more', () => {
         const scene = withRegion([[0, 0], [1, 0], [1, 4.2], [0, 4.2]]);
-        scene.definitions.push({ id: 'def-bench', name: 'Bench', color: '#123456', defaultDimensions: [2, 0.5, 1] });
+        scene.definitions['def-bench'] = { id: 'def-bench', name: 'Bench', color: '#123456', dimensions: [2, 0.5, 1] };
         const r = packRegion(scene, { regionId: 'r', definitionId: 'def-bench', gapM: 0.1 });
         expect(r.boxes).toHaveLength(2);
         expect(r.yaw).toBeCloseTo(Math.PI / 2);
@@ -56,7 +56,7 @@ describe('packRegion', () => {
 
     it('keeps the gap from walls and existing boxes', () => {
         const scene = withRegion([[0, 0], [4, 0], [4, 3], [0, 3]], [
-            { kind: 'wall', id: 'w', start: [2, 0], end: [2, 3], heightM: 2, thicknessM: 0.2 },
+            { kind: 'wall', id: 'w', start: [2, 0], end: [2, 3], baseY: 0, height: 2, thickness: 0.2 },
         ]);
         const r = packRegion(scene, { regionId: 'r', definitionId: 'def-crate', gapM: 0.2 });
         expect(r.boxes.length).toBeGreaterThan(0);

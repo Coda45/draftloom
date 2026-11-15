@@ -48,6 +48,6 @@ describe('geometry', () => {
         close(snapAngle([0, 0], [10, 5], 90, 8), [10, 5]);
         const s = snapAngle([0, 0], [10, 9], 45, 8);
         expect(s[0]).toBeCloseTo(s[1]);
-        close(snapAngle([0, 0], [10, 9], 'free', 8), [10, 9]);
+        close(snapAngle([0, 0], [10, 9], 0, 8), [10, 9]);
     });
 });

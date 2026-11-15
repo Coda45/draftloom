@@ -1,23 +1,23 @@
 // Source image overlay: visibility, opacity, and manual pixel -> world alignment.
 import { useEditor, useStoreState } from '../../app/EditorContext';
-import type { AffineMatrix2D, SourceReference } from '../../scene/schema';
+import type { SourceReference } from '../../scene/schema';
 import { NumberField } from '../inspector/fields';
 
 export const DEFAULT_METERS_PER_PIXEL = 0.01;
 
 /** Similarity transform: uniform scale, rotation, then translation. */
-export function similarityMatrix(metersPerPixel: number, rotationRad: number, originX: number, originZ: number): AffineMatrix2D {
+export function similarityMatrix(metersPerPixel: number, rotationRad: number, originX: number, originZ: number): NonNullable<SourceReference['pixelToWorldXZ']> {
     const c = Math.cos(rotationRad) * metersPerPixel;
     const s = Math.sin(rotationRad) * metersPerPixel;
-    return [c, -s, originX, s, c, originZ];
+    return [c, s, -s, c, originX, originZ];
 }
 
-export function decomposeMatrix(m: AffineMatrix2D): { metersPerPixel: number; rotationRad: number; originX: number; originZ: number } {
-    return { metersPerPixel: Math.hypot(m[0], m[3]), rotationRad: Math.atan2(m[3], m[0]), originX: m[2], originZ: m[5] };
+export function decomposeMatrix(m: NonNullable<SourceReference['pixelToWorldXZ']>): { metersPerPixel: number; rotationRad: number; originX: number; originZ: number } {
+    return { metersPerPixel: Math.hypot(m[0], m[1]), rotationRad: Math.atan2(m[1], m[0]), originX: m[4], originZ: m[5] };
 }
 
-export function effectiveMatrix(source: SourceReference): AffineMatrix2D {
-    return source.calibration?.pixelToWorld ?? similarityMatrix(DEFAULT_METERS_PER_PIXEL, 0, 0, 0);
+export function effectiveMatrix(source: SourceReference): NonNullable<SourceReference['pixelToWorldXZ']> {
+    return source.pixelToWorldXZ ?? similarityMatrix(DEFAULT_METERS_PER_PIXEL, 0, 0, 0);
 }
 
 interface Props {
@@ -32,7 +32,7 @@ interface Props {
 export function SourcePanel({ hasImage, visible, opacity, onVisible, onOpacity, onLoadImage }: Props) {
     const { run } = useEditor();
     const { scene } = useStoreState();
-    const source = scene.source;
+    const source = scene.sources[0];
     const m = source ? decomposeMatrix(effectiveMatrix(source)) : null;
 
     const align = (patch: Partial<NonNullable<typeof m>>) => {
@@ -40,7 +40,11 @@ export function SourcePanel({ hasImage, visible, opacity, onVisible, onOpacity, 
         const n = { ...m, ...patch };
         run({
             type: 'setSource',
-            source: { ...source, calibration: { method: 'manual', pixelToWorld: similarityMatrix(n.metersPerPixel, n.rotationRad, n.originX, n.originZ) } },
+            source: {
+                ...source,
+                pixelToWorldXZ: similarityMatrix(n.metersPerPixel, n.rotationRad, n.originX, n.originZ),
+                calibrationMethod: 'manual',
+            },
         });
     };
 
@@ -63,7 +67,7 @@ export function SourcePanel({ hasImage, visible, opacity, onVisible, onOpacity, 
             {source && hasImage && m && (
                 <>
                     <p className="muted small">
-                        {source.fileName ?? 'Image'} · {source.calibration ? `calibrated (${source.calibration.method})` : 'uncalibrated reference'}
+                        {source.name} · {source.pixelToWorldXZ ? `calibrated (${source.calibrationMethod ?? 'unspecified'})` : 'uncalibrated reference'}
                     </p>
                     <label className="check">
                         <input type="checkbox" checked={visible} onChange={(e) => onVisible(e.target.checked)} /> Show overlay
@@ -80,7 +84,7 @@ export function SourcePanel({ hasImage, visible, opacity, onVisible, onOpacity, 
                         <NumberField label="Offset X" unit="m" value={m.originX} onCommit={(v) => align({ originX: v })} />
                         <NumberField label="Offset Z" unit="m" value={m.originZ} onCommit={(v) => align({ originZ: v })} />
                     </div>
-                    {source.calibration?.method === 'reconstructed' && <p className="muted small">Editing alignment replaces the reconstructed calibration with a manual one.</p>}
+                    {source.calibrationMethod && source.calibrationMethod !== 'manual' && <p className="muted small">Editing alignment replaces the {source.calibrationMethod} calibration with a manual one.</p>}
                 </>
             )}
         </section>

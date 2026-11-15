@@ -2,110 +2,109 @@
     "schemaVersion": 1,
     "id": "scene-simple-studio",
     "name": "Simple studio",
-    "units": "meters",
-    "createdAt": "2026-11-14T00:00:00.000Z",
-    "updatedAt": "2026-11-14T00:00:00.000Z",
-    "settings": {
-        "gridSizeM": 0.5,
-        "gridSnap": false,
-        "snapAngle": 90,
-        "snapToleranceDeg": 8
-    },
-    "definitions": [
-        {
+    "units": "m",
+    "upAxis": "Y",
+    "definitions": {
+        "def-desk": {
             "id": "def-desk",
             "name": "Desk",
-            "color": "#4f7cac",
-            "defaultDimensions": [1.4, 0.75, 0.7],
-            "category": "furniture"
+            "dimensions": [1.4, 0.75, 0.7],
+            "color": "#4f7cac"
         },
-        {
+        "def-rack": {
             "id": "def-rack",
             "name": "Storage Rack",
-            "color": "#c9733a",
-            "defaultDimensions": [1.2, 1.8, 0.5],
-            "category": "storage"
+            "dimensions": [1.2, 1.8, 0.5],
+            "color": "#c9733a"
         }
-    ],
+    },
     "objects": [
         {
-            "kind": "wall",
             "id": "wall-north",
+            "kind": "wall",
             "name": "North wall",
             "start": [0, 0],
             "end": [8, 0],
-            "heightM": 2.7,
-            "thicknessM": 0.15,
-            "provenance": { "origin": "manual" }
+            "baseY": 0,
+            "height": 2.7,
+            "thickness": 0.15,
+            "provenance": { "method": "manual" }
         },
         {
-            "kind": "wall",
             "id": "wall-east",
+            "kind": "wall",
             "name": "East wall",
             "start": [8, 0],
             "end": [8, 6],
-            "heightM": 2.7,
-            "thicknessM": 0.15,
-            "provenance": { "origin": "manual" }
+            "baseY": 0,
+            "height": 2.7,
+            "thickness": 0.15,
+            "provenance": { "method": "manual" }
         },
         {
-            "kind": "wall",
             "id": "wall-south",
+            "kind": "wall",
             "name": "South wall",
             "start": [8, 6],
             "end": [0, 6],
-            "heightM": 2.7,
-            "thicknessM": 0.15,
-            "provenance": { "origin": "manual" }
+            "baseY": 0,
+            "height": 2.7,
+            "thickness": 0.15,
+            "provenance": { "method": "manual" }
         },
         {
-            "kind": "wall",
             "id": "wall-west",
+            "kind": "wall",
             "name": "West wall",
             "start": [0, 6],
             "end": [0, 0],
-            "heightM": 2.7,
-            "thicknessM": 0.15,
-            "provenance": { "origin": "manual" }
+            "baseY": 0,
+            "height": 2.7,
+            "thickness": 0.15,
+            "provenance": { "method": "manual" }
         },
         {
-            "kind": "box",
             "id": "box-desk-1",
+            "kind": "box",
             "definitionId": "def-desk",
             "position": [1.5, 0, 1.0],
-            "yaw": 0,
-            "provenance": { "origin": "manual" }
+            "rotationY": 0,
+            "provenance": { "method": "manual" }
         },
         {
-            "kind": "box",
             "id": "box-desk-2",
-            "definitionId": "def-desk",
+            "kind": "box",
             "name": "Standing desk",
+            "definitionId": "def-desk",
             "position": [3.5, 0, 1.0],
-            "yaw": 0,
+            "rotationY": 0,
             "dimensionsOverride": [1.6, 1.1, 0.8],
-            "provenance": { "origin": "manual" }
+            "provenance": { "method": "manual" }
         },
         {
-            "kind": "box",
             "id": "box-rack-1",
+            "kind": "box",
             "definitionId": "def-rack",
             "position": [7.3, 0, 1.2],
-            "yaw": 1.5707963267948966,
-            "provenance": { "origin": "manual" }
+            "rotationY": 1.5707963267948966,
+            "provenance": { "method": "manual" }
         },
         {
-            "kind": "region",
             "id": "region-storage",
+            "kind": "region",
             "name": "Storage zone",
-            "polygon": [
-                [4.5, 3.0],
-                [7.6, 3.0],
-                [7.6, 5.6],
-                [4.5, 5.6]
-            ],
-            "color": "#6aa84f",
-            "provenance": { "origin": "manual" }
+            "polygon": [[4.5, 3.0], [7.6, 3.0], [7.6, 5.6], [4.5, 5.6]],
+            "provenance": { "method": "manual" }
         }
-    ]
+    ],
+    "sources": [],
+    "settings": {
+        "displayUnit": "m",
+        "gridSizeM": 0.5,
+        "gridSnap": false,
+        "snapAngleDeg": 90,
+        "snapToleranceDeg": 8
+    },
+    "createdAt": "2026-11-14T00:00:00.000Z",
+    "updatedAt": "2026-11-14T00:00:00.000Z"
 }

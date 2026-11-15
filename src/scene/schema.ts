@@ -1,153 +1,110 @@
-// Canonical Draftloom scene schema. This file is the scene contract shared by
-// the editor, renderer, persistence, export, and reconstruction import.
+// Canonical Draftloom scene schema shared by editing, rendering, persistence,
+// export, and reconstruction. Keep this file aligned with ARCHITECTURE.md.
 //
-// World conventions (binding):
+// World conventions:
 // - Right-handed, Y-up, meters, radians.
-// - The ground plane is X/Z. 2D points are written [x, z].
-// - Viewed from above (looking down -Y) with +X to the right, +Z points DOWN
-//   the screen. The 2D editor maps world X -> SVG x and world Z -> SVG y.
-// - Yaw is rotation about +Y using the right-hand rule. Positive yaw turns +X
-//   toward -Z, which appears counter-clockwise in the top-down view.
-// - Box `position` is the BOTTOM CENTER of the box. Dimensions are
-//   [widthX, heightY, depthZ] measured in the box's local (unrotated) frame.
+// - The ground plane is X/Z. 2D points are [x, z].
+// - Box positions are bottom-center anchors.
 
 export const SCENE_SCHEMA_VERSION = 1 as const;
 
-/** A ground-plane point [x, z] in meters. */
 export type Vec2 = [number, number];
-
-/** A world point [x, y, z] in meters. */
 export type Vec3 = [number, number, number];
-
-/** Box dimensions [widthX, heightY, depthZ] in meters. */
 export type Dimensions = [number, number, number];
+export type SourceMode = 'floorplan' | 'isometric' | 'orthographic';
 
-/** A 2x3 affine matrix [a, b, c, d, e, f] mapping image pixels to world XZ:
- *  x = a*u + b*v + c, z = d*u + e*v + f, where (u, v) are pixel coordinates
- *  with the origin at the image's top-left corner and v pointing down. */
-export type AffineMatrix2D = [number, number, number, number, number, number];
-
-export type SnapAngleMode = 'free' | 15 | 45 | 90;
-
-export interface SceneSettings {
-    /** Grid spacing used for display and optional grid snapping. */
-    gridSizeM: number;
-    gridSnap: boolean;
-    /** Allowed angle increment for wall drawing; 'free' disables snapping. */
-    snapAngle: SnapAngleMode;
-    /** Snap only when the drawn angle is within this tolerance of an increment. */
-    snapToleranceDeg: number;
-}
-
-export type ObjectOrigin = 'manual' | 'reconstructed' | 'packing' | 'imported';
-
-/** Where a piece of geometry came from and how certain it is. */
-export interface Provenance {
-    origin: ObjectOrigin;
-    /** 0..1 confidence reported by reconstruction, when known. */
+export type GeometryProvenance = {
+    sourceId?: string;
+    method: 'manual' | 'detected' | 'inferred';
     confidence?: number;
-    /** True when the geometry was inferred rather than directly observed. */
-    inferred?: boolean;
-    /** Optional source-image polygon in pixels that produced this object. */
-    sourcePolygonPx?: Vec2[];
-    /** Free-form note, e.g. the legend label that was read. */
-    note?: string;
-}
+    notes?: string[];
+};
 
-export interface ObjectDefinition {
+export type ObjectDefinition = {
     id: string;
     name: string;
-    /** Lowercase or uppercase #rrggbb. */
+    dimensions: Dimensions;
     color: string;
-    defaultDimensions: Dimensions;
-    /** Optional legend label or category the user drew (e.g. "blue = rack"). */
-    category?: string;
-}
+    assetId?: string;
+};
 
-export interface BoxInstance {
+export type BoxInstance = {
+    id: string;
     kind: 'box';
-    id: string;
     definitionId: string;
-    /** Optional per-instance display name; defaults to the definition name. */
     name?: string;
-    /** Bottom-center position in world meters. */
     position: Vec3;
-    /** Rotation about +Y in radians. */
-    yaw: number;
-    /** When present, replaces the definition's default dimensions. */
+    rotationY: number;
     dimensionsOverride?: Dimensions;
-    provenance?: Provenance;
-}
+    provenance?: GeometryProvenance;
+};
 
-export interface WallSegment {
-    kind: 'wall';
+export type WallSegment = {
     id: string;
+    kind: 'wall';
     name?: string;
-    /** Ground-plane centerline endpoints. */
     start: Vec2;
     end: Vec2;
-    heightM: number;
-    thicknessM: number;
-    color?: string;
-    provenance?: Provenance;
-}
+    baseY: number;
+    height: number;
+    thickness: number;
+    provenance?: GeometryProvenance;
+};
 
-export interface Region {
-    kind: 'region';
+export type Region = {
     id: string;
+    kind: 'region';
     name: string;
-    /** Simple polygon on the ground plane; the closing point is NOT repeated. */
     polygon: Vec2[];
-    color?: string;
-    provenance?: Provenance;
-}
+    provenance?: GeometryProvenance;
+};
 
 export type SceneObject = BoxInstance | WallSegment | Region;
 export type SceneObjectKind = SceneObject['kind'];
 
-export type SourceKind = 'top-down' | 'isometric' | 'unknown';
-
-export interface SourceCalibration {
-    pixelToWorld: AffineMatrix2D;
-    /** 'reconstructed' when supplied by import, 'manual' when user-aligned. */
-    method: 'reconstructed' | 'manual';
-}
-
-/** Reference to the source image a scene was built from. */
-export interface SourceReference {
-    kind: SourceKind;
-    /** Key of the image Blob in local IndexedDB storage, when stored. */
+export type SourceReference = {
+    id: string;
+    name: string;
+    mode: SourceMode;
     imageKey?: string;
-    fileName?: string;
     mimeType?: string;
     widthPx?: number;
     heightPx?: number;
-    /** Absent means the overlay is uncalibrated. */
-    calibration?: SourceCalibration;
-}
+    pixelToWorldXZ?: [number, number, number, number, number, number];
+    calibrationMethod?: 'manual' | 'detected' | 'inferred';
+    notes?: string[];
+};
 
-export interface SceneDocument {
-    schemaVersion: typeof SCENE_SCHEMA_VERSION;
+export type SceneSettings = {
+    displayUnit: 'm' | 'cm' | 'ft' | 'in';
+    gridSizeM: number;
+    gridSnap: boolean;
+    snapAngleDeg: 90 | 45 | 15 | 0;
+    snapToleranceDeg: number;
+};
+
+export type SceneDocument = {
+    schemaVersion: 1;
     id: string;
     name: string;
-    units: 'meters';
-    /** ISO-8601 timestamps. */
-    createdAt: string;
-    updatedAt: string;
-    settings: SceneSettings;
-    definitions: ObjectDefinition[];
+    units: 'm';
+    upAxis: 'Y';
+    definitions: Record<string, ObjectDefinition>;
     objects: SceneObject[];
-    source?: SourceReference;
-}
+    sources: SourceReference[];
+    settings: SceneSettings;
+    createdAt?: string;
+    updatedAt: string;
+};
 
 export const DEFAULT_SETTINGS: SceneSettings = {
+    displayUnit: 'm',
     gridSizeM: 0.5,
     gridSnap: false,
-    snapAngle: 90,
+    snapAngleDeg: 90,
     snapToleranceDeg: 8,
 };
 
-/** Upper bound accepted by validation to reject runaway imports. */
 export const MAX_SCENE_OBJECTS = 5000;
 export const MAX_DEFINITIONS = 500;
 export const MAX_POLYGON_VERTICES = 1000;

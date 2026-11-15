@@ -1,5 +1,5 @@
 // Editor tool and overlay types shared by the 2D view and the app shell.
-import type { AffineMatrix2D } from '../scene/schema';
+import type { SourceReference } from '../scene/schema';
 
 export type Tool = 'select' | 'wall' | 'box' | 'region' | 'pan';
 
@@ -16,7 +16,7 @@ export interface OverlayImage {
     widthPx: number;
     heightPx: number;
     /** Pixel -> world XZ affine transform. */
-    matrix: AffineMatrix2D;
+    matrix: NonNullable<SourceReference['pixelToWorldXZ']>;
     calibrated: boolean;
     visible: boolean;
     opacity: number;

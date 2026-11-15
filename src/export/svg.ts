@@ -33,7 +33,7 @@ export function sceneToSvg(scene: SceneDocument, options: SvgExportOptions = {})
     for (const o of scene.objects) {
         if (o.kind === 'region') {
             all.push(...o.polygon);
-            const color = o.color ?? '#6aa84f';
+            const color = '#6aa84f';
             regions.push(`    <polygon id="${esc(o.id)}" points="${pts(o.polygon)}" fill="${color}" fill-opacity="0.15" stroke="${color}" stroke-width="0.03" stroke-dasharray="0.15 0.08"/>`);
             if (labels) {
                 const [cx, cz] = polygonCentroid(o.polygon);
@@ -43,7 +43,7 @@ export function sceneToSvg(scene: SceneDocument, options: SvgExportOptions = {})
             const fp = wallFootprint(o);
             if (fp.length === 0) continue;
             all.push(...fp);
-            walls.push(`    <polygon id="${esc(o.id)}" points="${pts(fp)}" fill="${o.color ?? '#2b2b2b'}"/>`);
+            walls.push(`    <polygon id="${esc(o.id)}" points="${pts(fp)}" fill="#2b2b2b"/>`);
         } else {
             const fp = boxFootprint(o, scene.definitions);
             all.push(...fp);
@@ -51,7 +51,9 @@ export function sceneToSvg(scene: SceneDocument, options: SvgExportOptions = {})
             const color = def?.color ?? '#999999';
             boxes.push(`    <polygon id="${esc(o.id)}" points="${pts(fp)}" fill="${color}" fill-opacity="0.55" stroke="${color}" stroke-width="0.02"/>`);
             if (labels) {
-                text.push(`    <text x="${fmt(o.position[0])}" y="${fmt(o.position[2])}" font-size="${fontSize * 0.8}" fill="#1a1a1a">${esc(o.name ?? def?.name ?? 'Box')}</text>`);
+                const legacyName = o.provenance?.notes?.find((note) => note.startsWith('displayName:'))?.slice('displayName:'.length).trim();
+                const customName = o.name?.trim() || legacyName;
+                text.push(`    <text x="${fmt(o.position[0])}" y="${fmt(o.position[2])}" font-size="${fontSize * 0.8}" fill="#1a1a1a">${esc(customName || def?.name || 'Box')}</text>`);
             }
         }
     }

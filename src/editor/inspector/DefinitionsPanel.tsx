@@ -14,12 +14,13 @@ interface Props {
 export function DefinitionsPanel({ activeDefinitionId, onActivate }: Props) {
     const { run } = useEditor();
     const { scene } = useStoreState();
-    const active = scene.definitions.find((d) => d.id === activeDefinitionId) ?? null;
+    const definitions = Object.values(scene.definitions);
+    const active = (activeDefinitionId && scene.definitions[activeDefinitionId]) || null;
 
     const create = () => {
         const id = newId('def');
-        const n = scene.definitions.length + 1;
-        if (run({ type: 'addDefinition', definition: { id, name: `Object ${n}`, color: PALETTE[(n - 1) % PALETTE.length], defaultDimensions: [1, 1, 1] } })) {
+        const n = definitions.length + 1;
+        if (run({ type: 'addDefinition', definition: { id, name: `Object ${n}`, color: PALETTE[(n - 1) % PALETTE.length], dimensions: [1, 1, 1] } })) {
             onActivate(id);
         }
     };
@@ -32,9 +33,9 @@ export function DefinitionsPanel({ activeDefinitionId, onActivate }: Props) {
                     + New
                 </button>
             </h2>
-            {scene.definitions.length === 0 && <p className="muted">No definitions yet. Create one to place boxes.</p>}
+            {definitions.length === 0 && <p className="muted">No definitions yet. Create one to place boxes.</p>}
             <ul className="def-list">
-                {scene.definitions.map((d) => {
+                {definitions.map((d) => {
                     const count = scene.objects.filter((o) => o.kind === 'box' && o.definitionId === d.id).length;
                     return (
                         <li key={d.id}>
@@ -42,7 +43,7 @@ export function DefinitionsPanel({ activeDefinitionId, onActivate }: Props) {
                                 <span className="swatch" style={{ background: d.color }} />
                                 <span className="def-name">{d.name}</span>
                                 <span className="muted small">
-                                    {d.defaultDimensions.map((v) => v.toFixed(2)).join(' × ')} m · {count}
+                                    {d.dimensions.map((v) => v.toFixed(2)).join(' × ')} m · {count}
                                 </span>
                             </button>
                         </li>
@@ -62,11 +63,11 @@ export function DefinitionsPanel({ activeDefinitionId, onActivate }: Props) {
                                 label={label}
                                 unit="m"
                                 min={0.01}
-                                value={active.defaultDimensions[axis]}
+                                value={active.dimensions[axis]}
                                 onCommit={(v) => {
-                                    const next = [...active.defaultDimensions] as Dimensions;
+                                    const next = [...active.dimensions] as Dimensions;
                                     next[axis] = v;
-                                    run({ type: 'editDefinition', id: active.id, patch: { defaultDimensions: next } });
+                                    run({ type: 'editDefinition', id: active.id, patch: { dimensions: next } });
                                 }}
                             />
                         ))}

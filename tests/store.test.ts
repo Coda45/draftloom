@@ -12,7 +12,7 @@ function box(store: SceneStore, id: string): BoxInstance {
 describe('SceneStore', () => {
     it('editDefinition updates linked instances but keeps overrides', () => {
         const store = new SceneStore(sampleScene());
-        store.dispatch({ type: 'editDefinition', id: 'def-desk', patch: { defaultDimensions: [2, 0.8, 1] } });
+        store.dispatch({ type: 'editDefinition', id: 'def-desk', patch: { dimensions: [2, 0.8, 1] } });
         const defs = store.getScene().definitions;
         expect(boxDimensions(box(store, 'box-desk-1'), defs)).toEqual([2, 0.8, 1]);
         expect(boxDimensions(box(store, 'box-desk-2'), defs)).toEqual([1.6, 1.1, 0.8]);
@@ -25,6 +25,14 @@ describe('SceneStore', () => {
         expect(boxDimensions(box(store, 'box-desk-1'), store.getScene().definitions)[1]).toBe(2.0);
         store.dispatch({ type: 'clearInstanceDimensionsOverride', id: 'box-desk-1' });
         expect(box(store, 'box-desk-1').dimensionsOverride).toBeUndefined();
+    });
+
+    it('stores explicit per-instance names in the canonical object', () => {
+        const store = new SceneStore(sampleScene());
+        store.dispatch({ type: 'renameObject', id: 'box-desk-1', name: 'Conference desk' });
+        expect(box(store, 'box-desk-1').name).toBe('Conference desk');
+        store.dispatch({ type: 'renameObject', id: 'box-desk-1', name: '' });
+        expect(box(store, 'box-desk-1').name).toBeUndefined();
     });
 
     it('undo and redo restore committed edits without mutating history', () => {
@@ -44,7 +52,7 @@ describe('SceneStore', () => {
         const kinds: string[] = [];
         store.subscribe((k) => kinds.push(k));
         store.setSelectedId('wall-north');
-        store.dispatch({ type: 'setWallHeight', id: 'wall-north', heightM: 3 });
+        store.dispatch({ type: 'setWallHeight', id: 'wall-north', height: 3 });
         expect(kinds).toEqual(['selection', 'scene']);
         expect(store.getState().revision).toBe(1);
         expect(store.getState().selectedId).toBe('wall-north');
@@ -54,8 +62,8 @@ describe('SceneStore', () => {
         const store = new SceneStore(sampleScene());
         const before = store.getScene();
         expect(() => store.dispatch({ type: 'moveRegionVertex', id: 'region-storage', index: 0, point: [7.6, 5.6] })).toThrow(SceneCommandError);
-        expect(() => store.dispatch({ type: 'setWallHeight', id: 'wall-north', heightM: 0 })).toThrow(SceneCommandError);
-        expect(() => store.dispatch({ type: 'addBox', box: { kind: 'box', id: 'box-desk-1', definitionId: 'def-desk', position: [0, 0, 0], yaw: 0 } })).toThrow(/already exists/);
+        expect(() => store.dispatch({ type: 'setWallHeight', id: 'wall-north', height: 0 })).toThrow(SceneCommandError);
+        expect(() => store.dispatch({ type: 'addBox', box: { kind: 'box', id: 'box-desk-1', definitionId: 'def-desk', position: [0, 0, 0], rotationY: 0 } })).toThrow(/already exists/);
         expect(store.getScene()).toBe(before);
     });
 

@@ -1,7 +1,7 @@
 // Editor-side entry point for reconstruction results produced by the import
 // module (src/import, owned by the reconstruction side). This is the only
 // place the editor accepts reconstructed scenes.
-import type { ReconstructionIssue, ReconstructionResult } from '../shared/reconstruction-contract';
+import { RECONSTRUCTION_CONTRACT_VERSION, type ReconstructionIssue, type ReconstructionResult } from '../shared/reconstruction-contract';
 import { newId } from '../scene/ids';
 import type { ProjectStorage } from '../scene/persistence';
 import type { SceneStore } from '../scene/store';
@@ -11,7 +11,7 @@ export type ApplyOutcome = { ok: true; issues: ReconstructionIssue[] } | { ok: f
 
 /**
  * Validates result.scene, stores the optional source image locally under
- * scene.source.imageKey, and replaces the current document.
+ * the primary source's imageKey, and replaces the current document.
  */
 export async function applyReconstruction(
     store: SceneStore,
@@ -19,14 +19,17 @@ export async function applyReconstruction(
     result: ReconstructionResult,
     sourceImage?: Blob,
 ): Promise<ApplyOutcome> {
-    if (result.contractVersion !== 1) return { ok: false, errors: [`Unsupported reconstruction contractVersion ${String(result.contractVersion)}`] };
+    if (result.contractVersion !== RECONSTRUCTION_CONTRACT_VERSION) {
+        return { ok: false, errors: [`Unsupported reconstruction contractVersion ${String(result.contractVersion)}`] };
+    }
     const v = validateScene(result.scene);
     if (!v.ok) return { ok: false, errors: v.errors };
     let scene = v.scene;
     const issues = Array.isArray(result.issues) ? [...result.issues] : [];
 
     if (sourceImage) {
-        const imageKey = scene.source?.imageKey ?? newId('img');
+        const primarySource = scene.sources[0];
+        const imageKey = primarySource?.imageKey ?? newId('img');
         if (storage) {
             try {
                 await storage.putBlob(imageKey, sourceImage);
@@ -39,7 +42,15 @@ export async function applyReconstruction(
                 });
             }
         }
-        scene = { ...scene, source: { kind: 'unknown', ...scene.source, imageKey, mimeType: scene.source?.mimeType ?? (sourceImage.type || undefined) } };
+        const source = primarySource ?? {
+            id: newId('source'),
+            name: 'Imported sketch',
+            mode: result.modeUsed,
+        };
+        scene = {
+            ...scene,
+            sources: [{ ...source, imageKey, mimeType: source.mimeType ?? (sourceImage.type || undefined) }, ...scene.sources.slice(1)],
+        };
     }
 
     store.replaceScene(scene);

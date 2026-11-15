@@ -16,7 +16,7 @@ import { NATIVE_EXTENSION, downloadBlob, parseProjectFile, safeFileName, seriali
 import { sceneToSvg } from '../export/svg';
 import { newId } from '../scene/ids';
 import { Autosave, ProjectStorage, type SavedProject, type SaveStatus } from '../scene/persistence';
-import type { SceneDocument, SnapAngleMode } from '../scene/schema';
+import type { SceneDocument } from '../scene/schema';
 import { SceneStore } from '../scene/store';
 import { validateScene } from '../scene/validate';
 import type { ReconstructionIssue } from '../shared/reconstruction-contract';
@@ -37,6 +37,22 @@ function createStorage(): ProjectStorage | null {
     } catch {
         return null;
     }
+}
+
+function readImageSize(blob: Blob): Promise<{ widthPx: number; heightPx: number }> {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(blob);
+        const image = new Image();
+        image.onload = () => {
+            URL.revokeObjectURL(url);
+            resolve({ widthPx: image.naturalWidth, heightPx: image.naturalHeight });
+        };
+        image.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('The selected image could not be decoded.'));
+        };
+        image.src = url;
+    });
 }
 
 export function App() {
@@ -67,7 +83,8 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
     const [mode, setMode] = useState<ViewMode>('2d');
     const [tool, setTool] = useState<Tool>('select');
     const [projection, setProjection] = useState<Projection>('perspective');
-    const [activeDefinitionId, setActiveDefinitionId] = useState<string | null>(scene.definitions[0]?.id ?? null);
+    const definitions = useMemo(() => Object.values(scene.definitions), [scene.definitions]);
+    const [activeDefinitionId, setActiveDefinitionId] = useState<string | null>(definitions[0]?.id ?? null);
     const [fitRequest, setFitRequest] = useState(0);
     const [frameRequest, setFrameRequest] = useState<{ n: number; id: string | null }>({ n: 0, id: null });
     const [issues, setIssues] = useState<ReconstructionIssue[]>([]);
@@ -121,16 +138,17 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
 
     // Keep the active definition valid as definitions change.
     useEffect(() => {
-        if (!activeDefinitionId || !scene.definitions.some((d) => d.id === activeDefinitionId)) {
-            setActiveDefinitionId(scene.definitions[0]?.id ?? null);
+        if (!activeDefinitionId || !scene.definitions[activeDefinitionId]) {
+            setActiveDefinitionId(definitions[0]?.id ?? null);
         }
-    }, [scene.definitions, activeDefinitionId]);
+    }, [scene.definitions, definitions, activeDefinitionId]);
 
     // --- Source image overlay ---
     const [overlayVisible, setOverlayVisible] = useState(true);
     const [overlayOpacity, setOverlayOpacity] = useState(0.5);
     const [image, setImage] = useState<{ key: string; url: string; w: number; h: number } | null>(null);
-    const imageKey = scene.source?.imageKey;
+    const source = scene.sources[0];
+    const imageKey = source?.imageKey;
 
     useEffect(() => {
         if (!imageKey || !storage) {
@@ -168,13 +186,13 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
     }, [image]);
 
     const overlay: OverlayImage | null =
-        image && scene.source
+        image && source
             ? {
                   url: image.url,
-                  widthPx: scene.source.widthPx ?? image.w,
-                  heightPx: scene.source.heightPx ?? image.h,
-                  matrix: effectiveMatrix(scene.source),
-                  calibrated: !!scene.source.calibration,
+                  widthPx: source.widthPx ?? image.w,
+                  heightPx: source.heightPx ?? image.h,
+                  matrix: effectiveMatrix(source),
+                  calibrated: !!source.pixelToWorldXZ,
                   visible: overlayVisible,
                   opacity: overlayOpacity,
               }
@@ -192,7 +210,27 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
             notify(`Could not store the image: ${err instanceof Error ? err.message : String(err)}`, 'error');
             return;
         }
-        run({ type: 'setSource', source: { kind: scene.source?.kind ?? 'top-down', imageKey: key, fileName: file.name, mimeType: file.type || undefined } });
+        let dimensions: { widthPx: number; heightPx: number } | undefined;
+        try {
+            dimensions = await readImageSize(file);
+        } catch (err) {
+            notify(err instanceof Error ? err.message : String(err), 'error');
+        }
+        run({
+            type: 'setSource',
+            source: {
+                id: source?.id ?? newId('source'),
+                name: file.name,
+                mode: source?.mode ?? 'floorplan',
+                imageKey: key,
+                mimeType: file.type || source?.mimeType,
+                widthPx: dimensions?.widthPx ?? source?.widthPx,
+                heightPx: dimensions?.heightPx ?? source?.heightPx,
+                pixelToWorldXZ: source?.pixelToWorldXZ,
+                calibrationMethod: source?.calibrationMethod,
+                notes: source?.notes,
+            },
+        });
         setOverlayVisible(true);
     };
 
@@ -213,7 +251,7 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
         if (parsed.kind === 'scene') {
             store.replaceScene(parsed.scene);
             setIssues([]);
-            notify(`Opened ${file.name}.${parsed.scene.source?.imageKey ? ' Source images are not included in project files.' : ''}`);
+            notify(`Opened ${file.name}.${parsed.scene.sources.some((item) => item.imageKey) ? ' Source images are not included in project files.' : ''}`);
         } else {
             const r = await applyReconstruction(store, storage, parsed.result);
             if (!r.ok) {
@@ -415,7 +453,7 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
 
             <main className={`workspace mode-${mode}`}>
                 <div className="pane pane-2d" hidden={!show2d}>
-                    <TopDownView tool={tool} activeDefinitionId={activeDefinitionId} overlay={overlay} fitRequest={fitRequest} onToolDone={() => setTool('select')} />
+                    <TopDownView tool={tool} activeDefinitionId={activeDefinitionId} gridSnap={scene.settings.gridSnap} overlay={overlay} fitRequest={fitRequest} onToolDone={() => setTool('select')} />
                     <div className="pane-hint">{toolHint}</div>
                 </div>
                 <div className="pane pane-3d" hidden={!show3d}>
@@ -440,11 +478,11 @@ function Workspace({ notice }: { notice: { text: string; tone: NoticeTone } | nu
                 <span>Units: m</span>
                 <label>
                     Snap
-                    <select value={String(scene.settings.snapAngle)} onChange={(e) => run({ type: 'updateSettings', patch: { snapAngle: (e.target.value === 'free' ? 'free' : Number(e.target.value)) as SnapAngleMode } })}>
+                    <select value={String(scene.settings.snapAngleDeg)} onChange={(e) => run({ type: 'updateSettings', patch: { snapAngleDeg: Number(e.target.value) as 0 | 15 | 45 | 90 } })}>
                         <option value="90">90°</option>
                         <option value="45">45°</option>
                         <option value="15">15°</option>
-                        <option value="free">Free</option>
+                        <option value="0">Free</option>
                     </select>
                 </label>
                 <label>
@@ -492,13 +530,16 @@ function IssuesPanel({ issues, onClear }: { issues: ReconstructionIssue[]; onCle
                 </button>
             </h2>
             <ul className="issues">
-                {issues.map((i) => (
-                    <li key={i.id} className={`issue ${i.severity}`}>
-                        <button className="issue-button" disabled={!i.objectIds?.length} onClick={() => i.objectIds?.[0] && store.setSelectedId(i.objectIds[0])}>
-                            <span className="sev">{i.severity}</span> {i.message}
-                        </button>
-                    </li>
-                ))}
+                {issues.map((i, index) => {
+                    const targetId = i.objectId ?? i.objectIds?.[0];
+                    return (
+                        <li key={i.id ?? `${i.code}-${targetId ?? index}`} className={`issue ${i.severity}`}>
+                            <button className="issue-button" disabled={!targetId} onClick={() => targetId && store.setSelectedId(targetId)}>
+                                <span className="sev">{i.severity}</span> {i.message}
+                            </button>
+                        </li>
+                    );
+                })}
             </ul>
         </section>
     );

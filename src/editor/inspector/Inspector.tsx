@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useEditor, useStoreState } from '../../app/EditorContext';
 import { boxDimensions, polygonArea, wallLength } from '../../scene/geometry';
-import type { BoxInstance, Dimensions, Provenance, Region, SceneDocument, WallSegment } from '../../scene/schema';
+import type { BoxInstance, Dimensions, GeometryProvenance, Region, SceneDocument, WallSegment } from '../../scene/schema';
+import { customObjectName } from '../viewport3d/sceneObjects';
 import { NumberField, TextField } from './fields';
 
 const DEG = 180 / Math.PI;
@@ -35,30 +36,31 @@ export function Inspector() {
 function BoxInspector({ box, scene }: { box: BoxInstance; scene: SceneDocument }) {
     const { run } = useEditor();
     const [scope, setScope] = useState<'instance' | 'definition'>('instance');
-    const def = scene.definitions.find((d) => d.id === box.definitionId);
+    const definitions = Object.values(scene.definitions);
+    const def = scene.definitions[box.definitionId];
     const dims = boxDimensions(box, scene.definitions);
     const linked = scene.objects.filter((o) => o.kind === 'box' && o.definitionId === box.definitionId && !o.dimensionsOverride).length;
 
     const setDim = (axis: 0 | 1 | 2, v: number) => {
         if (scope === 'definition' && def) {
-            const next = [...def.defaultDimensions] as Dimensions;
+            const next = [...def.dimensions] as Dimensions;
             next[axis] = v;
-            run({ type: 'editDefinition', id: def.id, patch: { defaultDimensions: next } });
+            run({ type: 'editDefinition', id: def.id, patch: { dimensions: next } });
         } else {
             const next = [...dims] as Dimensions;
             next[axis] = v;
             run({ type: 'setInstanceDimensionsOverride', id: box.id, dimensions: next });
         }
     };
-    const shown = scope === 'definition' && def ? def.defaultDimensions : dims;
+    const shown = scope === 'definition' && def ? def.dimensions : dims;
 
     return (
         <>
-            <TextField label="Name" value={box.name ?? ''} placeholder={def?.name} onCommit={(name) => run({ type: 'renameObject', id: box.id, name })} />
+            <TextField label="Name" value={customObjectName(box) ?? ''} placeholder={def?.name} onCommit={(name) => run({ type: 'renameObject', id: box.id, name })} />
             <label className="field">
                 <span className="field-label">Definition</span>
                 <select value={box.definitionId} onChange={(e) => run({ type: 'setBoxDefinition', id: box.id, definitionId: e.target.value })}>
-                    {scene.definitions.map((d) => (
+                    {definitions.map((d) => (
                         <option key={d.id} value={d.id}>
                             {d.name}
                         </option>
@@ -70,7 +72,7 @@ function BoxInspector({ box, scene }: { box: BoxInstance; scene: SceneDocument }
                 <NumberField label="Z" unit="m" value={box.position[2]} onCommit={(z) => run({ type: 'moveBox', id: box.id, position: [box.position[0], box.position[1], z] })} />
                 <NumberField label="Base Y" unit="m" value={box.position[1]} onCommit={(y) => run({ type: 'moveBox', id: box.id, position: [box.position[0], y, box.position[2]] })} />
             </div>
-            <NumberField label="Yaw" unit="°" step={15} digits={2} value={box.yaw * DEG} onCommit={(deg) => run({ type: 'setBoxRotation', id: box.id, yaw: deg / DEG })} />
+            <NumberField label="Yaw" unit="°" step={15} digits={2} value={box.rotationY * DEG} onCommit={(deg) => run({ type: 'setBoxRotation', id: box.id, rotationY: deg / DEG })} />
 
             <div className="scope-toggle" role="radiogroup" aria-label="Dimension edit scope">
                 <button className={scope === 'instance' ? 'on' : ''} onClick={() => setScope('instance')}>
@@ -107,7 +109,7 @@ function WallInspector({ wall }: { wall: WallSegment }) {
     const { run } = useEditor();
     return (
         <>
-            <TextField label="Name" value={wall.name ?? ''} placeholder="Wall" onCommit={(name) => run({ type: 'renameObject', id: wall.id, name })} />
+            <TextField label="Name" value={customObjectName(wall) ?? ''} placeholder="Wall" onCommit={(name) => run({ type: 'renameObject', id: wall.id, name })} />
             <div className="field-row">
                 <NumberField label="Start X" unit="m" value={wall.start[0]} onCommit={(v) => run({ type: 'moveWallEndpoint', id: wall.id, endpoint: 'start', point: [v, wall.start[1]] })} />
                 <NumberField label="Start Z" unit="m" value={wall.start[1]} onCommit={(v) => run({ type: 'moveWallEndpoint', id: wall.id, endpoint: 'start', point: [wall.start[0], v] })} />
@@ -117,8 +119,9 @@ function WallInspector({ wall }: { wall: WallSegment }) {
                 <NumberField label="End Z" unit="m" value={wall.end[1]} onCommit={(v) => run({ type: 'moveWallEndpoint', id: wall.id, endpoint: 'end', point: [wall.end[0], v] })} />
             </div>
             <div className="field-row">
-                <NumberField label="Height" unit="m" min={0.01} value={wall.heightM} onCommit={(v) => run({ type: 'setWallHeight', id: wall.id, heightM: v })} />
-                <NumberField label="Thickness" unit="m" min={0.005} step={0.01} value={wall.thicknessM} onCommit={(v) => run({ type: 'setWallThickness', id: wall.id, thicknessM: v })} />
+                <NumberField label="Base Y" unit="m" value={wall.baseY} onCommit={(v) => run({ type: 'setWallBaseY', id: wall.id, baseY: v })} />
+                <NumberField label="Height" unit="m" min={0.01} value={wall.height} onCommit={(v) => run({ type: 'setWallHeight', id: wall.id, height: v })} />
+                <NumberField label="Thickness" unit="m" min={0.005} step={0.01} value={wall.thickness} onCommit={(v) => run({ type: 'setWallThickness', id: wall.id, thickness: v })} />
             </div>
             <p className="readout">Length {wallLength(wall).toFixed(3)} m</p>
             <IdLine id={wall.id} />
@@ -142,14 +145,14 @@ function RegionInspector({ region }: { region: Region }) {
     );
 }
 
-function ProvenanceInfo({ provenance }: { id: string; provenance?: Provenance }) {
+function ProvenanceInfo({ provenance }: { id: string; provenance?: GeometryProvenance }) {
     if (!provenance) return null;
     return (
         <div className="provenance">
-            <span>Source: {provenance.origin}</span>
+            <span>Source: {provenance.method}</span>
             {provenance.confidence !== undefined && <span>Confidence {(provenance.confidence * 100).toFixed(0)}%</span>}
-            {provenance.inferred && <span className="warn">Inferred geometry — please verify</span>}
-            {provenance.note && <span>{provenance.note}</span>}
+            {provenance.method === 'inferred' && <span className="warn">Inferred geometry — please verify</span>}
+            {provenance.notes?.filter((note) => !note.startsWith('displayName:')).map((note) => <span key={note}>{note}</span>)}
         </div>
     );
 }

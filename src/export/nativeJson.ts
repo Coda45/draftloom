@@ -1,5 +1,5 @@
 // Portable .draftloom.json project files. Lossless for all native fields.
-import type { ReconstructionResult } from '../shared/reconstruction-contract';
+import { RECONSTRUCTION_CONTRACT_VERSION, type ReconstructionResult } from '../shared/reconstruction-contract';
 import type { SceneDocument } from '../scene/schema';
 import { validateScene } from '../scene/validate';
 
@@ -22,13 +22,60 @@ export function parseProjectFile(text: string): ParsedProjectFile {
     } catch (err) {
         return { ok: false, errors: [`Not valid JSON: ${err instanceof Error ? err.message : String(err)}`] };
     }
-    if (typeof data === 'object' && data !== null && 'contractVersion' in data && 'scene' in data) {
-        const r = data as { contractVersion: unknown; scene: unknown; issues?: unknown };
-        if (r.contractVersion !== 1) return { ok: false, errors: [`Unsupported reconstruction contractVersion ${JSON.stringify(r.contractVersion)}`] };
+    if (typeof data === 'object' && data !== null && 'contractVersion' in data && 'scene' in data && !('modeUsed' in data)) {
+        const legacy = data as { contractVersion: unknown; scene: unknown; issues?: unknown };
+        if (legacy.contractVersion !== RECONSTRUCTION_CONTRACT_VERSION) {
+            return { ok: false, errors: [`Unsupported legacy reconstruction contractVersion ${JSON.stringify(legacy.contractVersion)}`] };
+        }
+        const v = validateScene(legacy.scene);
+        if (!v.ok) return { ok: false, errors: v.errors.map((e) => `scene.${e}`) };
+        const issues = Array.isArray(legacy.issues)
+            ? legacy.issues.map((value) => {
+                  const issue = value as Record<string, unknown>;
+                  const objectIds = Array.isArray(issue.objectIds) ? issue.objectIds : [];
+                  return {
+                      severity: issue.severity as ReconstructionResult['issues'][number]['severity'],
+                      code: String(issue.code ?? 'legacy-issue'),
+                      message: String(issue.message ?? 'Imported issue'),
+                      ...(typeof issue.id === 'string' ? { id: issue.id } : {}),
+                      ...(typeof objectIds[0] === 'string' ? { objectId: objectIds[0] } : {}),
+                      ...(objectIds.every((id) => typeof id === 'string') && objectIds.length > 0 ? { objectIds: objectIds as string[] } : {}),
+                  };
+              })
+            : [];
+        return {
+            ok: true,
+            kind: 'reconstruction',
+            result: {
+                contractVersion: RECONSTRUCTION_CONTRACT_VERSION,
+                modeUsed: v.scene.sources[0]?.mode === 'isometric' ? 'isometric' : 'floorplan',
+                scene: v.scene,
+                issues,
+                requiresScaleConfirmation: !v.scene.sources[0]?.pixelToWorldXZ,
+            },
+        };
+    }
+    if (typeof data === 'object' && data !== null && 'modeUsed' in data && 'scene' in data) {
+        const r = data as { contractVersion?: unknown; modeUsed: unknown; scene: unknown; issues?: unknown; requiresScaleConfirmation?: unknown };
+        if (r.contractVersion !== undefined && r.contractVersion !== RECONSTRUCTION_CONTRACT_VERSION) {
+            return { ok: false, errors: [`Unsupported reconstruction contractVersion ${JSON.stringify(r.contractVersion)}`] };
+        }
+        if (r.modeUsed !== 'floorplan' && r.modeUsed !== 'isometric') return { ok: false, errors: ['Reconstruction modeUsed must be floorplan or isometric'] };
+        if (typeof r.requiresScaleConfirmation !== 'boolean') return { ok: false, errors: ['Reconstruction requiresScaleConfirmation must be boolean'] };
         const v = validateScene(r.scene);
         if (!v.ok) return { ok: false, errors: v.errors.map((e) => `scene.${e}`) };
         const issues = Array.isArray(r.issues) ? (r.issues as ReconstructionResult['issues']) : [];
-        return { ok: true, kind: 'reconstruction', result: { contractVersion: 1, scene: v.scene, issues } };
+        return {
+            ok: true,
+            kind: 'reconstruction',
+            result: {
+                contractVersion: RECONSTRUCTION_CONTRACT_VERSION,
+                modeUsed: r.modeUsed,
+                scene: v.scene,
+                issues,
+                requiresScaleConfirmation: r.requiresScaleConfirmation,
+            },
+        };
     }
     const v = validateScene(data);
     if (!v.ok) return { ok: false, errors: v.errors };

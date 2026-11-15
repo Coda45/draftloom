@@ -8,6 +8,7 @@ import { packRegion } from './packRegion';
 export function PackingPanel({ activeDefinitionId }: { activeDefinitionId: string | null }) {
     const { store, run } = useEditor();
     const { scene, selectedId } = useStoreState();
+    const definitions = Object.values(scene.definitions);
     const regions = scene.objects.filter((o): o is Region => o.kind === 'region');
     const [regionChoice, setRegionChoice] = useState<string>('');
     const [defChoice, setDefChoice] = useState<string>('');
@@ -19,7 +20,7 @@ export function PackingPanel({ activeDefinitionId }: { activeDefinitionId: strin
     // Default to the selected region and the active definition.
     const selectedRegion = regions.find((r) => r.id === selectedId);
     const regionId = regions.some((r) => r.id === regionChoice) ? regionChoice : (selectedRegion?.id ?? regions[0]?.id ?? '');
-    const definitionId = scene.definitions.some((d) => d.id === defChoice) ? defChoice : (activeDefinitionId ?? scene.definitions[0]?.id ?? '');
+    const definitionId = scene.definitions[defChoice] ? defChoice : (activeDefinitionId ?? definitions[0]?.id ?? '');
 
     const arrange = () => {
         const r = packRegion(store.getScene(), {
@@ -59,7 +60,7 @@ export function PackingPanel({ activeDefinitionId }: { activeDefinitionId: strin
                     <label className="field">
                         <span className="field-label">Object</span>
                         <select value={definitionId} onChange={(e) => setDefChoice(e.target.value)}>
-                            {scene.definitions.map((d) => (
+                            {definitions.map((d) => (
                                 <option key={d.id} value={d.id}>
                                     {d.name}
                                 </option>
